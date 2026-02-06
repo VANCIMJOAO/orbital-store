@@ -129,9 +129,10 @@ export async function GET(
     const gotvServerUrl = (process.env.GOTV_SERVER_URL || 'http://localhost:8080').trim();
     const matchzyAuthToken = (process.env.MATCHZY_AUTH_TOKEN || 'orbital_secret_token').trim();
 
-    // MatchZy exige matchid como inteiro - converter UUID para número
-    // Usa os primeiros 8 hex do UUID (ex: "b15d38d1" -> 2975631569)
-    const numericMatchId = parseInt(matchId.replace(/-/g, '').substring(0, 8), 16);
+    // MatchZy exige matchid como inteiro (Int32) - converter UUID para número
+    // Usa os primeiros 8 hex do UUID e garante que cabe em Int32 (max 2147483647)
+    const rawNumeric = parseInt(matchId.replace(/-/g, '').substring(0, 8), 16);
+    const numericMatchId = rawNumeric % 2147483647;
 
     // Montar configuração do MatchZy
     const config: MatchZyConfig = {
