@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 interface Match {
@@ -27,6 +28,7 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
 };
 
 export default function PartidasAdmin() {
+  const router = useRouter();
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -158,7 +160,8 @@ export default function PartidasAdmin() {
                 return (
                   <tr
                     key={match.id}
-                    className="border-b border-[#27272A] hover:bg-[#1a1a2e] transition-colors"
+                    onClick={() => router.push(`/admin/partidas/${match.id}`)}
+                    className="border-b border-[#27272A] hover:bg-[#1a1a2e] transition-colors cursor-pointer"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -218,8 +221,9 @@ export default function PartidasAdmin() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={(e) => { e.stopPropagation(); router.push(`/admin/partidas/${match.id}`); }}
                           className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
-                          title="Editar placar"
+                          title="Ver detalhes"
                         >
                           <svg className="w-4 h-4 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
