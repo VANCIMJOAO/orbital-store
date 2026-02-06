@@ -520,8 +520,8 @@ export type Database = {
         Row: {
           id: string
           tournament_id: string
-          team1_id: string
-          team2_id: string
+          team1_id: string | null
+          team2_id: string | null
           team1_score: number
           team2_score: number
           winner_id: string | null
@@ -549,8 +549,8 @@ export type Database = {
         Insert: {
           id?: string
           tournament_id: string
-          team1_id: string
-          team2_id: string
+          team1_id?: string | null
+          team2_id?: string | null
           team1_score?: number
           team2_score?: number
           winner_id?: string | null

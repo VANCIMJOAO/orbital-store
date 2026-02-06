@@ -42,8 +42,8 @@ interface TournamentTeam {
 
 interface Match {
   id: string;
-  team1_id: string;
-  team2_id: string;
+  team1_id: string | null;
+  team2_id: string | null;
   team1_score: number;
   team2_score: number;
   winner_id: string | null;
@@ -51,8 +51,8 @@ interface Match {
   round: string | null;
   scheduled_at: string | null;
   best_of: number;
-  team1?: { name: string; tag: string };
-  team2?: { name: string; tag: string };
+  team1?: { name: string; tag: string } | null;
+  team2?: { name: string; tag: string } | null;
 }
 
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
@@ -238,10 +238,10 @@ export default function CampeonatoDetalhes() {
       ["winner_semi_1", "winner_semi_2"].forEach((round, idx) => {
         matchesToCreate.push({
           tournament_id: tournamentId,
-          team1_id: teams[0].team_id, // Placeholder - sera atualizado
-          team2_id: teams[1].team_id, // Placeholder - sera atualizado
+          team1_id: null,
+          team2_id: null,
           round,
-          status: "pending", // Aguardando times
+          status: "pending",
           scheduled_at: new Date(semiBaseTime + idx * matchDuration * 60 * 1000).toISOString(),
           best_of: 1,
           team1_score: 0,
@@ -252,8 +252,8 @@ export default function CampeonatoDetalhes() {
       // Winner Final (1 jogo)
       matchesToCreate.push({
         tournament_id: tournamentId,
-        team1_id: teams[0].team_id,
-        team2_id: teams[1].team_id,
+        team1_id: null,
+        team2_id: null,
         round: "winner_final",
         status: "pending",
         scheduled_at: new Date(semiBaseTime + 2 * matchDuration * 60 * 1000).toISOString(),
@@ -267,8 +267,8 @@ export default function CampeonatoDetalhes() {
       ["loser_round1_1", "loser_round1_2"].forEach((round, idx) => {
         matchesToCreate.push({
           tournament_id: tournamentId,
-          team1_id: teams[0].team_id,
-          team2_id: teams[1].team_id,
+          team1_id: null,
+          team2_id: null,
           round,
           status: "pending",
           scheduled_at: new Date(loserR1Time + idx * matchDuration * 60 * 1000).toISOString(),
@@ -283,8 +283,8 @@ export default function CampeonatoDetalhes() {
       ["loser_round2_1", "loser_round2_2"].forEach((round, idx) => {
         matchesToCreate.push({
           tournament_id: tournamentId,
-          team1_id: teams[0].team_id,
-          team2_id: teams[1].team_id,
+          team1_id: null,
+          team2_id: null,
           round,
           status: "pending",
           scheduled_at: new Date(loserR2Time + idx * matchDuration * 60 * 1000).toISOString(),
@@ -297,8 +297,8 @@ export default function CampeonatoDetalhes() {
       // Loser Semi (1 jogo)
       matchesToCreate.push({
         tournament_id: tournamentId,
-        team1_id: teams[0].team_id,
-        team2_id: teams[1].team_id,
+        team1_id: null,
+        team2_id: null,
         round: "loser_semi",
         status: "pending",
         scheduled_at: new Date(loserR2Time + 2 * matchDuration * 60 * 1000).toISOString(),
@@ -310,8 +310,8 @@ export default function CampeonatoDetalhes() {
       // Loser Final (1 jogo)
       matchesToCreate.push({
         tournament_id: tournamentId,
-        team1_id: teams[0].team_id,
-        team2_id: teams[1].team_id,
+        team1_id: null,
+        team2_id: null,
         round: "loser_final",
         status: "pending",
         scheduled_at: new Date(loserR2Time + 3 * matchDuration * 60 * 1000).toISOString(),
@@ -323,8 +323,8 @@ export default function CampeonatoDetalhes() {
       // Grand Final (MD3)
       matchesToCreate.push({
         tournament_id: tournamentId,
-        team1_id: teams[0].team_id,
-        team2_id: teams[1].team_id,
+        team1_id: null,
+        team2_id: null,
         round: "grand_final",
         status: "pending",
         scheduled_at: new Date(loserR2Time + 4 * matchDuration * 60 * 1000).toISOString(),

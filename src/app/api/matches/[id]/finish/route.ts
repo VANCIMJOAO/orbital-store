@@ -159,8 +159,8 @@ async function checkAndActivateMatch(tournamentId: string, round: string) {
 
   if (!match) return;
 
-  // Se a partida está pendente, verificar se ambos os times são diferentes
-  if (match.status === "pending" && match.team1_id !== match.team2_id) {
+  // Se a partida está pendente, verificar se ambos os times estão definidos e são diferentes
+  if (match.status === "pending" && match.team1_id && match.team2_id && match.team1_id !== match.team2_id) {
     await supabase
       .from("matches")
       .update({ status: "scheduled" })

@@ -60,6 +60,13 @@ export async function GET(
       );
     }
 
+    if (!match.team1_id || !match.team2_id) {
+      return NextResponse.json(
+        { error: 'Partida ainda não tem ambos os times definidos' },
+        { status: 400 }
+      );
+    }
+
     // Buscar jogadores do time 1
     const { data: team1Players, error: team1Error } = await supabase
       .from('team_players')

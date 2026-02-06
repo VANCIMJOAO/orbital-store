@@ -10,8 +10,8 @@ interface Team {
 
 interface Match {
   id: string;
-  team1_id: string;
-  team2_id: string;
+  team1_id: string | null;
+  team2_id: string | null;
   team1_score: number;
   team2_score: number;
   winner_id: string | null;
@@ -19,8 +19,8 @@ interface Match {
   round: string | null;
   scheduled_at: string | null;
   best_of: number;
-  team1?: Team;
-  team2?: Team;
+  team1?: Team | null;
+  team2?: Team | null;
 }
 
 interface TournamentBracketProps {
@@ -49,8 +49,8 @@ function MatchCard({ match, onClick }: { match: Match; onClick?: () => void }) {
     });
   };
 
-  const getTeamStyle = (teamId: string) => {
-    if (!isFinished || !match.winner_id) return "";
+  const getTeamStyle = (teamId: string | null) => {
+    if (!isFinished || !match.winner_id || !teamId) return "";
     return teamId === match.winner_id ? "text-[#22c55e]" : "text-[#52525B]";
   };
 

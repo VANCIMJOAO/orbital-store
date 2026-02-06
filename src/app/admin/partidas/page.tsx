@@ -7,8 +7,8 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 interface Match {
   id: string;
   tournament_id: string;
-  team1_id: string;
-  team2_id: string;
+  team1_id: string | null;
+  team2_id: string | null;
   team1_score: number;
   team2_score: number;
   winner_id: string | null;
@@ -16,11 +16,12 @@ interface Match {
   round: string | null;
   scheduled_at: string | null;
   tournament?: { name: string };
-  team1?: { name: string; tag: string };
-  team2?: { name: string; tag: string };
+  team1?: { name: string; tag: string } | null;
+  team2?: { name: string; tag: string } | null;
 }
 
 const statusColors: Record<string, { bg: string; text: string; label: string }> = {
+  pending: { bg: "bg-[#52525B]/20", text: "text-[#A1A1AA]", label: "A DEFINIR" },
   scheduled: { bg: "bg-[#3b82f6]/20", text: "text-[#3b82f6]", label: "AGENDADA" },
   live: { bg: "bg-[#ef4444]/20", text: "text-[#ef4444]", label: "AO VIVO" },
   finished: { bg: "bg-[#22c55e]/20", text: "text-[#22c55e]", label: "FINALIZADA" },
@@ -156,23 +157,24 @@ export default function PartidasAdmin() {
               </tr>
             ) : (
               matches.map((match) => {
-                const status = statusColors[match.status] || statusColors.scheduled;
+                const status = statusColors[match.status] || statusColors.pending;
+                const isPending = match.status === "pending";
                 return (
                   <tr
                     key={match.id}
                     onClick={() => router.push(`/admin/partidas/${match.id}`)}
-                    className="border-b border-[#27272A] hover:bg-[#1a1a2e] transition-colors cursor-pointer"
+                    className={`border-b border-[#27272A] hover:bg-[#1a1a2e] transition-colors cursor-pointer ${isPending ? "opacity-50" : ""}`}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded bg-[#27272A] flex items-center justify-center">
                             <span className="text-[8px] font-mono text-[#A1A1AA]">
-                              {match.team1?.tag || "T1"}
+                              {match.team1?.tag || (isPending ? "?" : "T1")}
                             </span>
                           </div>
-                          <span className="text-sm text-[#F5F5DC]">
-                            {match.team1?.name || "Time 1"}
+                          <span className={`text-sm ${isPending ? "text-[#52525B] italic" : "text-[#F5F5DC]"}`}>
+                            {match.team1?.name || (isPending ? "TBD" : "Time 1")}
                           </span>
                         </div>
 
@@ -187,12 +189,12 @@ export default function PartidasAdmin() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-[#F5F5DC]">
-                            {match.team2?.name || "Time 2"}
+                          <span className={`text-sm ${isPending ? "text-[#52525B] italic" : "text-[#F5F5DC]"}`}>
+                            {match.team2?.name || (isPending ? "TBD" : "Time 2")}
                           </span>
                           <div className="w-8 h-8 rounded bg-[#27272A] flex items-center justify-center">
                             <span className="text-[8px] font-mono text-[#A1A1AA]">
-                              {match.team2?.tag || "T2"}
+                              {match.team2?.tag || (isPending ? "?" : "T2")}
                             </span>
                           </div>
                         </div>
@@ -205,7 +207,7 @@ export default function PartidasAdmin() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-mono text-xs text-[#A1A1AA] capitalize">
-                        {match.round?.replace("_", " ") || "-"}
+                        {match.round?.replaceAll("_", " ") || "-"}
                       </span>
                     </td>
                     <td className="px-6 py-4">

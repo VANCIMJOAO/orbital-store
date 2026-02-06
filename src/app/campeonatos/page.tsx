@@ -103,6 +103,7 @@ export default function CampeonatosPage() {
               const teamStats: Record<string, { wins: number; losses: number; loserBracketLosses: number }> = {};
 
               matchesData.forEach((match) => {
+                if (!match.team1_id || !match.team2_id) return;
                 if (!teamStats[match.team1_id]) teamStats[match.team1_id] = { wins: 0, losses: 0, loserBracketLosses: 0 };
                 if (!teamStats[match.team2_id]) teamStats[match.team2_id] = { wins: 0, losses: 0, loserBracketLosses: 0 };
 

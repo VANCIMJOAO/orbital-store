@@ -21,8 +21,8 @@ interface Tournament {
 interface Match {
   id: string;
   tournament_id: string;
-  team1_id: string;
-  team2_id: string;
+  team1_id: string | null;
+  team2_id: string | null;
   team1_score: number;
   team2_score: number;
   winner_id: string | null;
@@ -35,8 +35,8 @@ interface Match {
   is_live: boolean | null;
   best_of: number;
   map_name: string | null;
-  team1?: Team;
-  team2?: Team;
+  team1?: Team | null;
+  team2?: Team | null;
   tournament?: Tournament;
 }
 
@@ -164,6 +164,11 @@ export default function PartidaDetalhes() {
     if (!match) return;
     if (finishScores.team1 === finishScores.team2) {
       alert("A partida nao pode terminar empatada!");
+      return;
+    }
+
+    if (!match.team1_id || !match.team2_id) {
+      alert("Partida sem times definidos!");
       return;
     }
 
