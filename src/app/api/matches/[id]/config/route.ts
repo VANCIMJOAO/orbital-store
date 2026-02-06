@@ -1,0 +1,210 @@
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { Database } from '@/lib/database.types';
+
+// Supabase client com service role para acesso admin
+const supabase = createClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// Interface para a configuração do MatchZy
+interface MatchZyConfig {
+  matchid: string;
+  num_maps: number;
+  maplist: string[];
+  skip_veto: boolean;
+  side_type: 'knife' | 'standard' | 'never_knife';
+  players_per_team: number;
+  min_players_to_ready: number;
+  team1: {
+    name: string;
+    tag: string;
+    flag?: string;
+    players: Record<string, string>; // steamId -> nome
+  };
+  team2: {
+    name: string;
+    tag: string;
+    flag?: string;
+    players: Record<string, string>;
+  };
+  cvars?: Record<string, string>;
+}
+
+// GET /api/matches/[id]/config
+// Retorna a configuração JSON para o MatchZy
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: matchId } = await params;
+
+    // Buscar a partida com os times
+    const { data: match, error: matchError } = await supabase
+      .from('matches')
+      .select(`
+        *,
+        team1:teams!matches_team1_id_fkey(*),
+        team2:teams!matches_team2_id_fkey(*),
+        tournament:tournaments(*)
+      `)
+      .eq('id', matchId)
+      .single();
+
+    if (matchError || !match) {
+      return NextResponse.json(
+        { error: 'Partida não encontrada' },
+        { status: 404 }
+      );
+    }
+
+    // Buscar jogadores do time 1
+    const { data: team1Players, error: team1Error } = await supabase
+      .from('team_players')
+      .select(`
+        *,
+        profile:profiles(*)
+      `)
+      .eq('team_id', match.team1_id)
+      .eq('is_active', true);
+
+    if (team1Error) {
+      return NextResponse.json(
+        { error: 'Erro ao buscar jogadores do time 1' },
+        { status: 500 }
+      );
+    }
+
+    // Buscar jogadores do time 2
+    const { data: team2Players, error: team2Error } = await supabase
+      .from('team_players')
+      .select(`
+        *,
+        profile:profiles(*)
+      `)
+      .eq('team_id', match.team2_id)
+      .eq('is_active', true);
+
+    if (team2Error) {
+      return NextResponse.json(
+        { error: 'Erro ao buscar jogadores do time 2' },
+        { status: 500 }
+      );
+    }
+
+    // Converter jogadores para o formato do MatchZy
+    const team1PlayersMap: Record<string, string> = {};
+    team1Players?.forEach((tp) => {
+      // Prioridade: steam_id do team_player > steam_id do profile
+      const steamId = tp.steam_id || (tp.profile as any)?.steam_id;
+      const name = tp.nickname || (tp.profile as any)?.username || 'Player';
+      if (steamId) {
+        team1PlayersMap[steamId] = name;
+      }
+    });
+
+    const team2PlayersMap: Record<string, string> = {};
+    team2Players?.forEach((tp) => {
+      const steamId = tp.steam_id || (tp.profile as any)?.steam_id;
+      const name = tp.nickname || (tp.profile as any)?.username || 'Player';
+      if (steamId) {
+        team2PlayersMap[steamId] = name;
+      }
+    });
+
+    // Determinar mapa - usa o map_name da partida ou default
+    const mapName = match.map_name || 'de_ancient';
+    const bestOf = match.best_of || 1;
+
+    // URL do GOTV server para receber eventos
+    const gotvServerUrl = process.env.GOTV_SERVER_URL || 'http://localhost:8080';
+    const matchzyAuthToken = process.env.MATCHZY_AUTH_TOKEN || 'orbital_secret_token';
+
+    // Montar configuração do MatchZy
+    const config: MatchZyConfig = {
+      matchid: matchId,
+      num_maps: bestOf,
+      maplist: [mapName],
+      skip_veto: true, // Por enquanto, skip veto
+      side_type: 'knife', // Knife round para decidir lado
+      players_per_team: 5,
+      min_players_to_ready: 5,
+      team1: {
+        name: (match.team1 as any)?.name || 'Time 1',
+        tag: (match.team1 as any)?.tag || 'T1',
+        players: team1PlayersMap,
+      },
+      team2: {
+        name: (match.team2 as any)?.name || 'Time 2',
+        tag: (match.team2 as any)?.tag || 'T2',
+        players: team2PlayersMap,
+      },
+      cvars: {
+        matchzy_remote_log_url: `${gotvServerUrl}/api/matchzy/events`,
+        matchzy_remote_log_header_key: 'Authorization',
+        matchzy_remote_log_header_value: `Bearer ${matchzyAuthToken}`,
+      },
+    };
+
+    // Salvar config na partida
+    await supabase
+      .from('matches')
+      .update({ matchzy_config: config as any })
+      .eq('id', matchId);
+
+    return NextResponse.json(config);
+  } catch (error) {
+    console.error('Erro ao gerar config MatchZy:', error);
+    return NextResponse.json(
+      { error: 'Erro interno do servidor' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/matches/[id]/config
+// Salva uma configuração customizada para a partida
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: matchId } = await params;
+    const body = await request.json();
+
+    // Validar campos obrigatórios
+    if (!body.maplist || !Array.isArray(body.maplist)) {
+      return NextResponse.json(
+        { error: 'maplist é obrigatório' },
+        { status: 400 }
+      );
+    }
+
+    // Atualizar a partida com a config customizada
+    const { error } = await supabase
+      .from('matches')
+      .update({
+        matchzy_config: body,
+        map_name: body.maplist[0],
+        best_of: body.num_maps || 1,
+      })
+      .eq('id', matchId);
+
+    if (error) {
+      return NextResponse.json(
+        { error: 'Erro ao salvar configuração' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true, config: body });
+  } catch (error) {
+    console.error('Erro ao salvar config MatchZy:', error);
+    return NextResponse.json(
+      { error: 'Erro interno do servidor' },
+      { status: 500 }
+    );
+  }
+}

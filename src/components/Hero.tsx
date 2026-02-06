@@ -73,37 +73,63 @@ export default function Hero() {
             ROXA
           </span>
 
-          {/* Drip effect */}
+          {/* Glitch effect - estilo gamer */}
           <motion.div
-            className="absolute -bottom-4 left-1/2 transform -translate-x-1/2"
+            className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 flex items-center gap-2"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1 }}
           >
-            <svg width="200" height="40" viewBox="0 0 200 40" className="overflow-visible">
-              {[20, 60, 100, 140, 180].map((x, i) => (
-                <motion.ellipse
+            {/* Crosshair/mira central */}
+            <svg width="40" height="40" viewBox="0 0 40 40" className="text-[#A855F7]">
+              <motion.g
+                animate={{ rotate: 360 }}
+                transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+              >
+                <circle cx="20" cy="20" r="12" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+                <circle cx="20" cy="20" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="20" cy="20" r="2" fill="currentColor" />
+              </motion.g>
+              {/* Crosshair lines */}
+              <motion.line x1="20" y1="0" x2="20" y2="8" stroke="currentColor" strokeWidth="2"
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              />
+              <motion.line x1="20" y1="32" x2="20" y2="40" stroke="currentColor" strokeWidth="2"
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
+              />
+              <motion.line x1="0" y1="20" x2="8" y2="20" stroke="currentColor" strokeWidth="2"
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
+              />
+              <motion.line x1="32" y1="20" x2="40" y2="20" stroke="currentColor" strokeWidth="2"
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }}
+              />
+            </svg>
+
+            {/* Glitch bars */}
+            <div className="flex flex-col gap-1">
+              {[0, 1, 2].map((i) => (
+                <motion.div
                   key={i}
-                  cx={x}
-                  cy="5"
-                  rx="8"
-                  ry="15"
-                  fill="#A855F7"
-                  initial={{ cy: 5, opacity: 0.8 }}
+                  className="h-[2px] bg-[#A855F7]"
+                  style={{ width: `${30 - i * 8}px` }}
                   animate={{
-                    cy: [5, 25, 35],
-                    opacity: [0.8, 0.5, 0],
-                    ry: [15, 10, 5],
+                    opacity: [1, 0.2, 1, 0.5, 1],
+                    x: [0, -3, 2, -1, 0],
+                    scaleX: [1, 1.2, 0.8, 1.1, 1],
                   }}
                   transition={{
-                    duration: 2,
-                    delay: i * 0.2 + 1.5,
+                    duration: 0.8,
+                    delay: i * 0.15,
                     repeat: Infinity,
-                    repeatDelay: 3,
+                    repeatDelay: 2,
                   }}
                 />
               ))}
-            </svg>
+            </div>
           </motion.div>
         </motion.h1>
 
