@@ -126,12 +126,16 @@ export async function GET(
     const bestOf = match.best_of || 1;
 
     // URL do GOTV server para receber eventos
-    const gotvServerUrl = process.env.GOTV_SERVER_URL || 'http://localhost:8080';
-    const matchzyAuthToken = process.env.MATCHZY_AUTH_TOKEN || 'orbital_secret_token';
+    const gotvServerUrl = (process.env.GOTV_SERVER_URL || 'http://localhost:8080').trim();
+    const matchzyAuthToken = (process.env.MATCHZY_AUTH_TOKEN || 'orbital_secret_token').trim();
+
+    // MatchZy exige matchid como inteiro - converter UUID para número
+    // Usa os primeiros 8 hex do UUID (ex: "b15d38d1" -> 2975631569)
+    const numericMatchId = parseInt(matchId.replace(/-/g, '').substring(0, 8), 16);
 
     // Montar configuração do MatchZy
     const config: MatchZyConfig = {
-      matchid: matchId,
+      matchid: String(numericMatchId),
       num_maps: bestOf,
       maplist: [mapName],
       skip_veto: true, // Por enquanto, skip veto
@@ -152,6 +156,8 @@ export async function GET(
         matchzy_remote_log_url: `${gotvServerUrl}/api/matchzy/events`,
         matchzy_remote_log_header_key: 'Authorization',
         matchzy_remote_log_header_value: `Bearer ${matchzyAuthToken}`,
+        // UUID real da partida para o GOTV server identificar no banco
+        orbital_match_uuid: matchId,
       },
     };
 

@@ -46,7 +46,7 @@ export async function POST(
   }
 
   // Montar URL do config - sempre usar URL pública (o servidor CS2 precisa acessar pela internet)
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://orbital-store.vercel.app";
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://orbital-store.vercel.app").trim();
   const configUrl = `${siteUrl}/api/matches/${matchId}/config`;
 
   // Enviar comando para o servidor CS2 via Pterodactyl

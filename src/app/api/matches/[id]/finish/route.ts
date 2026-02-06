@@ -167,5 +167,49 @@ async function checkAndActivateMatch(tournamentId: string, round: string) {
       .eq("id", match.id);
 
     console.log(`[Bracket] Activated match ${match.id} (${round})`);
+
+    // Auto-carregar partida no servidor CS2 via Pterodactyl
+    await autoLoadMatchOnServer(match.id);
+  }
+}
+
+// Envia automaticamente o comando matchzy_loadmatch_url para o servidor CS2
+async function autoLoadMatchOnServer(matchId: string) {
+  const pterodactylUrl = process.env.PTERODACTYL_API_URL;
+  const pterodactylKey = process.env.PTERODACTYL_API_KEY;
+  const serverId = process.env.PTERODACTYL_SERVER_ID;
+
+  if (!pterodactylUrl || !pterodactylKey || !serverId) {
+    console.log("[AutoLoad] Pterodactyl não configurado, pulando auto-load");
+    return;
+  }
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://orbital-store.vercel.app").trim();
+  const configUrl = `${siteUrl}/api/matches/${matchId}/config`;
+  const command = `matchzy_loadmatch_url "${configUrl}"`;
+
+  try {
+    const resp = await fetch(
+      `${pterodactylUrl}/api/client/servers/${serverId}/command`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${pterodactylKey}`,
+          "Content-Type": "application/json",
+          "Accept": "application/vnd.pterodactyl.v1+json",
+        },
+        body: JSON.stringify({ command }),
+      }
+    );
+
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error("[AutoLoad] Pterodactyl error:", resp.status, errorText);
+      return;
+    }
+
+    console.log(`[AutoLoad] Partida ${matchId} carregada automaticamente no servidor: ${command}`);
+  } catch (error) {
+    console.error("[AutoLoad] Falha ao enviar comando:", error);
   }
 }

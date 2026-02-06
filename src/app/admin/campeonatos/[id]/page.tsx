@@ -335,7 +335,10 @@ export default function CampeonatoDetalhes() {
     }
 
     // Inserir todas as partidas
-    const { error } = await supabase.from("matches").insert(matchesToCreate);
+    const { data: createdMatches, error } = await supabase
+      .from("matches")
+      .insert(matchesToCreate)
+      .select("id, round, status");
 
     if (error) {
       console.error("Erro ao gerar bracket:", error);
@@ -345,6 +348,17 @@ export default function CampeonatoDetalhes() {
         .from("tournaments")
         .update({ status: "ongoing" })
         .eq("id", tournamentId);
+
+      // Auto-carregar primeira partida (quarter 1) no servidor CS2
+      const firstMatch = createdMatches?.find((m: any) => m.round === "winner_quarter_1");
+      if (firstMatch) {
+        try {
+          await fetch(`/api/matches/${firstMatch.id}/load-server`, { method: "POST" });
+          console.log("[Bracket] Primeira partida carregada automaticamente no servidor");
+        } catch (e) {
+          console.error("[Bracket] Falha ao auto-carregar primeira partida:", e);
+        }
+      }
     }
 
     setGenerating(false);
