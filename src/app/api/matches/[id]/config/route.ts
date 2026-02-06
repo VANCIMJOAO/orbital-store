@@ -10,7 +10,7 @@ const supabase = createClient<Database>(
 
 // Interface para a configuração do MatchZy
 interface MatchZyConfig {
-  matchid: string;
+  matchid: number;
   num_maps: number;
   maplist: string[];
   skip_veto: boolean;
@@ -135,7 +135,7 @@ export async function GET(
 
     // Montar configuração do MatchZy
     const config: MatchZyConfig = {
-      matchid: String(numericMatchId),
+      matchid: numericMatchId,
       num_maps: bestOf,
       maplist: [mapName],
       skip_veto: true, // Por enquanto, skip veto
