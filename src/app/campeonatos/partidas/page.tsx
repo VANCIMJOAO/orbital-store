@@ -31,13 +31,68 @@ const roundLabels: Record<string, string> = {
   grand_final: "Grand Final",
 };
 
+interface LiveMatchEnriched {
+  gotvMatchId: string;
+  dbMatchId: string;
+  mapName: string;
+  scoreCT: number;
+  scoreT: number;
+  currentRound: number;
+  team1: { name: string; tag: string; logo_url: string | null } | null;
+  team2: { name: string; tag: string; logo_url: string | null } | null;
+  round?: string;
+}
+
 function PartidasContent() {
   const { matches: liveMatches, serverOffline } = useGOTVMatches();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   const [upcomingMatches, setUpcomingMatches] = useState<MatchWithTeams[]>([]);
   const [finishedMatches, setFinishedMatches] = useState<MatchWithTeams[]>([]);
+  const [enrichedLiveMatches, setEnrichedLiveMatches] = useState<LiveMatchEnriched[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Enrich GOTV live matches with real team names from Supabase
+  useEffect(() => {
+    async function enrichLiveMatches() {
+      const linked = liveMatches.filter((m) => m.dbMatchId);
+      if (linked.length === 0) {
+        setEnrichedLiveMatches([]);
+        return;
+      }
+
+      const dbIds = linked.map((m) => m.dbMatchId!);
+      const { data: dbMatches } = await supabase
+        .from("matches")
+        .select(`
+          id, round,
+          team1:teams!matches_team1_id_fkey(name, tag, logo_url),
+          team2:teams!matches_team2_id_fkey(name, tag, logo_url)
+        `)
+        .in("id", dbIds);
+
+      const dbMap = new Map((dbMatches || []).map((m: any) => [m.id, m]));
+
+      setEnrichedLiveMatches(
+        linked.map((live) => {
+          const db = dbMap.get(live.dbMatchId!) as any;
+          return {
+            gotvMatchId: live.matchId,
+            dbMatchId: live.dbMatchId!,
+            mapName: live.mapName,
+            scoreCT: live.scoreCT,
+            scoreT: live.scoreT,
+            currentRound: live.currentRound,
+            team1: db?.team1 || null,
+            team2: db?.team2 || null,
+            round: db?.round || undefined,
+          };
+        })
+      );
+    }
+
+    enrichLiveMatches();
+  }, [liveMatches, supabase]);
 
   useEffect(() => {
     async function fetchData() {
@@ -118,21 +173,28 @@ function PartidasContent() {
           <h1 className="font-display text-2xl text-[#F5F5DC] mb-8">PARTIDAS</h1>
 
           {/* Partidas GOTV Ao Vivo */}
-          {!serverOffline && liveMatches.length > 0 && (
+          {!serverOffline && enrichedLiveMatches.length > 0 && (
             <>
               <div className="flex items-center gap-2 mb-4">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 <h2 className="font-mono text-red-500 text-sm tracking-wider">PARTIDAS AO VIVO - GOTV</h2>
               </div>
               <div className="space-y-3 mb-8">
-                {liveMatches.map((match) => (
+                {enrichedLiveMatches.map((match) => (
                   <Link
-                    key={match.matchId}
-                    href={`/campeonatos/partida/${match.matchId}`}
+                    key={match.dbMatchId}
+                    href={`/campeonatos/partida/${match.dbMatchId}`}
                     className="block bg-[#12121a] border border-red-500/30 rounded-lg p-4 hover:border-red-500/60 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-mono text-[#A855F7]">{match.mapName || "Mapa desconhecido"}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono text-[#A855F7]">{match.mapName || "Mapa desconhecido"}</span>
+                        {match.round && (
+                          <span className="text-xs font-mono text-[#A1A1AA]">
+                            {roundLabels[match.round] || match.round}
+                          </span>
+                        )}
+                      </div>
                       <span className="flex items-center gap-1.5 text-xs font-mono text-red-500">
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                         AO VIVO • ROUND {match.currentRound}
@@ -140,10 +202,16 @@ function PartidasContent() {
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded bg-[#3b82f6]/20 border border-[#3b82f6]/50 flex items-center justify-center">
-                          <span className="font-display text-[#3b82f6]">CT</span>
+                        <div className="w-12 h-12 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                          {match.team1?.logo_url ? (
+                            <img src={match.team1.logo_url} alt={match.team1.tag} className="w-8 h-8 object-contain" />
+                          ) : (
+                            <span className="font-display text-sm text-[#A1A1AA]">
+                              {match.team1?.tag?.substring(0, 3).toUpperCase() || "CT"}
+                            </span>
+                          )}
                         </div>
-                        <span className="text-[#F5F5DC] font-display">Counter-Terrorists</span>
+                        <span className="text-[#F5F5DC] font-display">{match.team1?.name || "Counter-Terrorists"}</span>
                       </div>
                       <div className="text-center">
                         <span className="font-display text-2xl">
@@ -153,16 +221,19 @@ function PartidasContent() {
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-[#F5F5DC] font-display">Terrorists</span>
-                        <div className="w-12 h-12 rounded bg-[#f59e0b]/20 border border-[#f59e0b]/50 flex items-center justify-center">
-                          <span className="font-display text-[#f59e0b]">T</span>
+                        <span className="text-[#F5F5DC] font-display">{match.team2?.name || "Terrorists"}</span>
+                        <div className="w-12 h-12 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                          {match.team2?.logo_url ? (
+                            <img src={match.team2.logo_url} alt={match.team2.tag} className="w-8 h-8 object-contain" />
+                          ) : (
+                            <span className="font-display text-sm text-[#A1A1AA]">
+                              {match.team2?.tag?.substring(0, 3).toUpperCase() || "T"}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-[#27272A] flex items-center justify-between">
-                      <span className="text-xs font-mono text-[#A1A1AA]">
-                        ID: {match.matchId.slice(0, 12)}...
-                      </span>
+                    <div className="mt-3 pt-3 border-t border-[#27272A] flex items-center justify-end">
                       <span className="text-xs font-mono text-[#A855F7] flex items-center gap-1">
                         Ver detalhes
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

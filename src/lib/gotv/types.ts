@@ -204,6 +204,7 @@ export interface FragmentData {
 // Tipos para lista de partidas ativas
 export interface ActiveMatchInfo {
   matchId: string;
+  dbMatchId?: string;
   status: string;
   mapName: string;
   scoreCT: number;

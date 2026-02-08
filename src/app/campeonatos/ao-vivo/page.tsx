@@ -388,51 +388,51 @@ export default function AoVivoPage() {
                     </div>
                   ) : (
                     <div className="divide-y divide-[#27272A]">
-                      {activeMatches.map((match) => (
-                        <div
-                          key={match.matchId}
-                          className={`p-4 hover:bg-[#1a1a2e] transition-colors ${
-                            selectedMatch === match.matchId ? "bg-[#A855F7]/10 border-l-2 border-l-[#A855F7]" : ""
-                          }`}
-                        >
-                          <button
-                            onClick={() => setSelectedMatch(match.matchId)}
-                            className="w-full text-left"
+                      {activeMatches.map((match) => {
+                        const linkId = match.dbMatchId || match.matchId;
+                        return (
+                          <div
+                            key={match.matchId}
+                            className={`p-4 hover:bg-[#1a1a2e] transition-colors ${
+                              selectedMatch === match.matchId ? "bg-[#A855F7]/10 border-l-2 border-l-[#A855F7]" : ""
+                            }`}
                           >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-mono text-sm text-[#F5F5DC]">{match.mapName || "Unknown Map"}</span>
-                              <span className="flex items-center gap-1 text-xs font-mono text-green-500">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                LIVE
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-lg font-display">
-                                <span className="text-[#3b82f6]">{match.scoreCT}</span>
-                                <span className="text-[#A1A1AA] mx-2">:</span>
-                                <span className="text-[#f59e0b]">{match.scoreT}</span>
-                              </span>
-                              <span className="text-xs font-mono text-[#A1A1AA]">
-                                R{match.currentRound}
-                              </span>
-                            </div>
-                            <div className="text-xs font-mono text-[#A1A1AA] mt-1">
-                              ID: {match.matchId.slice(0, 8)}...
-                            </div>
-                          </button>
-                          <div className="mt-2 pt-2 border-t border-[#27272A]">
-                            <Link
-                              href={`/campeonatos/partida/${match.matchId}`}
-                              className="flex items-center justify-center gap-2 w-full py-2 px-3 bg-[#A855F7]/20 hover:bg-[#A855F7]/30 border border-[#A855F7]/50 rounded text-xs font-mono text-[#A855F7] transition-colors"
+                            <button
+                              onClick={() => setSelectedMatch(match.matchId)}
+                              className="w-full text-left"
                             >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                              ABRIR PÁGINA DA PARTIDA
-                            </Link>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-mono text-sm text-[#F5F5DC]">{match.mapName || "Unknown Map"}</span>
+                                <span className="flex items-center gap-1 text-xs font-mono text-green-500">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                  LIVE
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-lg font-display">
+                                  <span className="text-[#3b82f6]">{match.scoreCT}</span>
+                                  <span className="text-[#A1A1AA] mx-2">:</span>
+                                  <span className="text-[#f59e0b]">{match.scoreT}</span>
+                                </span>
+                                <span className="text-xs font-mono text-[#A1A1AA]">
+                                  R{match.currentRound}
+                                </span>
+                              </div>
+                            </button>
+                            <div className="mt-2 pt-2 border-t border-[#27272A]">
+                              <Link
+                                href={`/campeonatos/partida/${linkId}`}
+                                className="flex items-center justify-center gap-2 w-full py-2 px-3 bg-[#A855F7]/20 hover:bg-[#A855F7]/30 border border-[#A855F7]/50 rounded text-xs font-mono text-[#A855F7] transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                ABRIR PÁGINA DA PARTIDA
+                              </Link>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
