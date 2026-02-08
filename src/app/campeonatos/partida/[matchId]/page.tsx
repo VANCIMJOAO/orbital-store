@@ -2,8 +2,38 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useGOTV } from "@/hooks/useGOTV";
+import { supabase } from "@/lib/supabase";
 import type { GOTVPlayerState, GameLogEvent } from "@/lib/gotv/types";
+
+// Tipo para dados do Supabase (pré-match)
+interface SupabaseMatchData {
+  id: string;
+  status: string;
+  scheduled_at: string | null;
+  round: string | null;
+  best_of: number;
+  team1_score: number;
+  team2_score: number;
+  team1: { id: string; name: string; tag: string; logo_url: string | null } | null;
+  team2: { id: string; name: string; tag: string; logo_url: string | null } | null;
+  tournament: { name: string } | null;
+}
+
+interface SupabasePlayer {
+  profile_id: string;
+  role: string | null;
+  steam_id: string | null;
+  nickname: string | null;
+  profiles: {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    level: number | null;
+    steam_id: string | null;
+  } | null;
+}
 
 // Verifica se o jogador tem dados suficientes para calcular estatísticas
 function hasPlayerStats(player: GOTVPlayerState): boolean {
@@ -68,12 +98,16 @@ function TeamScoreboardTable({
   players,
   teamName,
   teamSide,
-  currentRound
+  currentRound,
+  dbPlayers,
+  teamLogo,
 }: {
   players: GOTVPlayerState[];
   teamName: string;
   teamSide: 'CT' | 'T';
   currentRound: number;
+  dbPlayers?: SupabasePlayer[];
+  teamLogo?: string | null;
 }) {
   const teamColorClass = teamSide === 'CT' ? 'text-[#3b82f6]' : 'text-[#f59e0b]';
   const teamBgClass = teamSide === 'CT' ? 'bg-[#3b82f6]/10' : 'bg-[#f59e0b]/10';
@@ -81,19 +115,59 @@ function TeamScoreboardTable({
   const teamIconBg = teamSide === 'CT' ? 'bg-[#3b82f6]' : 'bg-[#f59e0b]';
 
   const roundsPlayed = Math.max(1, currentRound);
-  const sortedPlayers = [...players].sort((a, b) => {
+
+  // Criar set de steamIds online (do GOTV)
+  const onlineSteamIds = new Set(players.map(p => p.steamId));
+
+  // Merge: jogadores GOTV (com stats) + jogadores DB que não estão no GOTV (offline)
+  type MergedPlayer = {
+    type: 'gotv';
+    gotv: GOTVPlayerState;
+    db?: SupabasePlayer;
+  } | {
+    type: 'db_only';
+    db: SupabasePlayer;
+  };
+
+  const merged: MergedPlayer[] = [];
+
+  // Primeiro: jogadores GOTV (ordenados por rating)
+  const sortedGotv = [...players].sort((a, b) => {
     const ratingA = calculateRating(a, roundsPlayed) ?? 0;
     const ratingB = calculateRating(b, roundsPlayed) ?? 0;
     return ratingB - ratingA;
   });
 
+  for (const gotvPlayer of sortedGotv) {
+    // Tentar achar DB match pelo steamId
+    const dbMatch = dbPlayers?.find(dp => {
+      const dbSteamId = dp.steam_id || dp.profiles?.steam_id || '';
+      return dbSteamId === gotvPlayer.steamId;
+    });
+    merged.push({ type: 'gotv', gotv: gotvPlayer, db: dbMatch });
+  }
+
+  // Depois: jogadores DB que NÃO estão no GOTV (offline)
+  if (dbPlayers) {
+    for (const dbPlayer of dbPlayers) {
+      const dbSteamId = dbPlayer.steam_id || dbPlayer.profiles?.steam_id || '';
+      if (!dbSteamId || !onlineSteamIds.has(dbSteamId)) {
+        merged.push({ type: 'db_only', db: dbPlayer });
+      }
+    }
+  }
+
   return (
     <div className={`bg-[#1a1a2e] border ${teamBorderClass} rounded-lg overflow-hidden`}>
       {/* Header do time */}
       <div className={`${teamBgClass} px-4 py-3 flex items-center gap-3 border-b ${teamBorderClass}`}>
-        <div className={`w-6 h-6 rounded ${teamIconBg} flex items-center justify-center`}>
-          <span className="text-white text-xs font-bold">{teamSide === 'CT' ? 'CT' : 'TR'}</span>
-        </div>
+        {teamLogo ? (
+          <img src={teamLogo} alt={teamName} className="w-6 h-6 rounded object-cover" />
+        ) : (
+          <div className={`w-6 h-6 rounded ${teamIconBg} flex items-center justify-center`}>
+            <span className="text-white text-xs font-bold">{teamSide === 'CT' ? 'CT' : 'TR'}</span>
+          </div>
+        )}
         <span className={`font-display text-base ${teamColorClass}`}>{teamName}</span>
       </div>
 
@@ -133,75 +207,149 @@ function TeamScoreboardTable({
           </tr>
         </thead>
         <tbody>
-          {sortedPlayers.map((player, idx) => {
-            const kd = `${player.kills}-${player.deaths}`;
+          {merged.map((entry, idx) => {
+            if (entry.type === 'gotv') {
+              const player = entry.gotv;
+              const dbInfo = entry.db;
+              const avatarUrl = dbInfo?.profiles?.avatar_url;
+              const profileId = dbInfo?.profiles?.id;
+              const role = dbInfo?.role;
 
-            // Swing - impacto do jogador no round
-            const swing = calculateSwing(player, roundsPlayed);
-            const swingStr = swing !== null
-              ? (swing >= 0 ? `+${swing.toFixed(2)}%` : `${swing.toFixed(2)}%`)
-              : '-';
-            const swingColor = swing !== null
-              ? (swing > 0 ? 'text-[#22c55e]' : swing < 0 ? 'text-[#ef4444]' : 'text-[#71717A]')
-              : 'text-[#71717A]';
+              const kd = `${player.kills}-${player.deaths}`;
+              const swing = calculateSwing(player, roundsPlayed);
+              const swingStr = swing !== null
+                ? (swing >= 0 ? `+${swing.toFixed(2)}%` : `${swing.toFixed(2)}%`)
+                : '-';
+              const swingColor = swing !== null
+                ? (swing > 0 ? 'text-[#22c55e]' : swing < 0 ? 'text-[#ef4444]' : 'text-[#71717A]')
+                : 'text-[#71717A]';
+              const adr = player.damage > 0 ? (player.damage / roundsPlayed).toFixed(1) : '-';
+              const kast = calculateKAST(player, roundsPlayed);
+              const rating = calculateRating(player, roundsPlayed);
 
-            const adr = player.damage > 0 ? (player.damage / roundsPlayed).toFixed(1) : '-';
-            const kast = calculateKAST(player, roundsPlayed);
-            const rating = calculateRating(player, roundsPlayed);
+              const getRatingColor = (r: number | null) => {
+                if (r === null) return 'text-[#71717A]';
+                if (r >= 1.20) return 'text-[#22c55e]';
+                if (r >= 1.05) return 'text-[#F5F5DC]';
+                if (r >= 0.90) return 'text-[#f59e0b]';
+                return 'text-[#ef4444]';
+              };
 
-            const getRatingColor = (r: number | null) => {
-              if (r === null) return 'text-[#71717A]';
-              if (r >= 1.20) return 'text-[#22c55e]';
-              if (r >= 1.05) return 'text-[#F5F5DC]';
-              if (r >= 0.90) return 'text-[#f59e0b]';
-              return 'text-[#ef4444]';
-            };
-
-            return (
-              <tr
-                key={`${player.steamId}-${idx}`}
-                className="border-b border-[#27272A]/50 hover:bg-[#252540] transition-colors"
-              >
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-3">
-                    {/* Avatar do jogador */}
-                    <div className="w-8 h-8 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
-                      <span className="text-sm font-bold text-[#71717A]">
-                        {player.name.charAt(0).toUpperCase()}
-                      </span>
+              return (
+                <tr
+                  key={`gotv-${player.steamId}-${idx}`}
+                  className="border-b border-[#27272A]/50 hover:bg-[#252540] transition-colors"
+                >
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={player.name} className="w-8 h-8 rounded object-cover" />
+                        ) : (
+                          <span className="text-sm font-bold text-[#71717A]">
+                            {player.name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        {profileId ? (
+                          <Link
+                            href={`/campeonatos/jogador/${profileId}`}
+                            className="text-sm text-[#F5F5DC] font-medium hover:text-[#A855F7] transition-colors"
+                          >
+                            {player.name}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-[#F5F5DC] font-medium">{player.name}</span>
+                        )}
+                        {role && (
+                          <span className="text-[9px] font-mono text-[#71717A] uppercase">{role}</span>
+                        )}
+                        {player.steamId === "0" && (
+                          <span className="text-[9px] font-mono text-[#71717A]">BOT</span>
+                        )}
+                      </div>
                     </div>
-                    {/* Nome do jogador */}
-                    <div className="flex flex-col">
-                      <span className="text-sm text-[#F5F5DC] font-medium">
-                        {player.name}
-                      </span>
-                      {player.steamId === "0" && (
-                        <span className="text-[9px] font-mono text-[#71717A]">BOT</span>
-                      )}
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#F5F5DC]">{kd}</span>
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className={`text-sm font-mono ${swingColor}`}>{swingStr}</span>
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#F5F5DC]">{adr}</span>
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#F5F5DC]">{kast !== null ? `${kast}%` : '-'}</span>
+                  </td>
+                  <td className="text-right px-4 py-2.5 border-l border-[#27272A]">
+                    <span className={`text-sm font-bold font-mono ${getRatingColor(rating)}`}>
+                      {rating !== null ? rating.toFixed(2) : '-'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            } else {
+              // Jogador offline (só do DB)
+              const db = entry.db;
+              const playerName = db.nickname || db.profiles?.username || 'Jogador';
+              const avatarUrl = db.profiles?.avatar_url;
+              const profileId = db.profiles?.id;
+
+              return (
+                <tr
+                  key={`db-${db.profile_id}-${idx}`}
+                  className="border-b border-[#27272A]/50 opacity-40"
+                >
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={playerName} className="w-8 h-8 rounded object-cover" />
+                        ) : (
+                          <span className="text-sm font-bold text-[#71717A]">
+                            {playerName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        {profileId ? (
+                          <Link
+                            href={`/campeonatos/jogador/${profileId}`}
+                            className="text-sm text-[#F5F5DC] font-medium hover:text-[#A855F7] transition-colors"
+                          >
+                            {playerName}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-[#F5F5DC] font-medium">{playerName}</span>
+                        )}
+                        {db.role && (
+                          <span className="text-[9px] font-mono text-[#71717A] uppercase">{db.role}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#F5F5DC]">{kd}</span>
-                </td>
-                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className={`text-sm font-mono ${swingColor}`}>{swingStr}</span>
-                </td>
-                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#F5F5DC]">{adr}</span>
-                </td>
-                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#F5F5DC]">{kast !== null ? `${kast}%` : '-'}</span>
-                </td>
-                <td className="text-right px-4 py-2.5 border-l border-[#27272A]">
-                  <span className={`text-sm font-bold font-mono ${getRatingColor(rating)}`}>
-                    {rating !== null ? rating.toFixed(2) : '-'}
-                  </span>
-                </td>
-              </tr>
-            );
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#71717A]">-</span>
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#71717A]">-</span>
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#71717A]">-</span>
+                  </td>
+                  <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-mono text-[#71717A]">-</span>
+                  </td>
+                  <td className="text-right px-4 py-2.5 border-l border-[#27272A]">
+                    <span className="text-sm font-bold font-mono text-[#71717A]">-</span>
+                  </td>
+                </tr>
+              );
+            }
           })}
-          {sortedPlayers.length === 0 && (
+          {merged.length === 0 && (
             <tr>
               <td colSpan={6} className="px-4 py-8 text-center text-sm text-[#71717A]">
                 Sem jogadores
@@ -1127,11 +1275,148 @@ function MainScoreboard({
   );
 }
 
+// Componente de tabela pré-partida com jogadores do Supabase
+function PreMatchPlayerTable({
+  teamPlayers,
+  teamName,
+  teamLogo,
+  teamSide,
+  onlineSteamIds,
+}: {
+  teamPlayers: SupabasePlayer[];
+  teamName: string;
+  teamLogo: string | null;
+  teamSide: 'CT' | 'T';
+  onlineSteamIds: Set<string>;
+}) {
+  const teamColorClass = teamSide === 'CT' ? 'text-[#3b82f6]' : 'text-[#f59e0b]';
+  const teamBgClass = teamSide === 'CT' ? 'bg-[#3b82f6]/10' : 'bg-[#f59e0b]/10';
+  const teamBorderClass = teamSide === 'CT' ? 'border-[#3b82f6]/30' : 'border-[#f59e0b]/30';
+  const teamIconBg = teamSide === 'CT' ? 'bg-[#3b82f6]' : 'bg-[#f59e0b]';
+
+  return (
+    <div className={`bg-[#1a1a2e] border ${teamBorderClass} rounded-lg overflow-hidden`}>
+      {/* Header do time */}
+      <div className={`${teamBgClass} px-4 py-3 flex items-center gap-3 border-b ${teamBorderClass}`}>
+        {teamLogo ? (
+          <img src={teamLogo} alt={teamName} className="w-6 h-6 rounded object-cover" />
+        ) : (
+          <div className={`w-6 h-6 rounded ${teamIconBg} flex items-center justify-center`}>
+            <span className="text-white text-xs font-bold">{teamSide}</span>
+          </div>
+        )}
+        <span className={`font-display text-base ${teamColorClass}`}>{teamName}</span>
+      </div>
+
+      {/* Tabela de jogadores */}
+      <table className="w-full">
+        <thead>
+          <tr className="text-[11px] font-mono text-[#71717A] border-b border-[#27272A]">
+            <th className="text-left px-4 py-2.5 w-[35%]">
+              <span className="text-[#f59e0b]">P</span> Players
+            </th>
+            <th className="text-center px-3 py-2.5 w-[13%] border-l border-[#27272A]">K-D</th>
+            <th className="text-center px-3 py-2.5 w-[13%] border-l border-[#27272A]">Swing</th>
+            <th className="text-center px-3 py-2.5 w-[13%] border-l border-[#27272A]">ADR</th>
+            <th className="text-center px-3 py-2.5 w-[13%] border-l border-[#27272A]">KAST</th>
+            <th className="text-right px-4 py-2.5 w-[13%] border-l border-[#27272A]">
+              <span>Rating</span>
+              <span className="text-[9px] text-[#52525B] ml-1">3.0</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {teamPlayers.map((tp) => {
+            const playerName = tp.nickname || tp.profiles?.username || 'Jogador';
+            const steamId = tp.steam_id || tp.profiles?.steam_id || '';
+            const isOnline = steamId ? onlineSteamIds.has(steamId) : false;
+            const avatarUrl = tp.profiles?.avatar_url;
+            const profileId = tp.profiles?.id;
+
+            return (
+              <tr
+                key={tp.profile_id}
+                className={`border-b border-[#27272A]/50 transition-colors ${
+                  isOnline ? 'hover:bg-[#252540]' : 'opacity-40'
+                }`}
+              >
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    {/* Avatar */}
+                    <div className="w-8 h-8 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={playerName} className="w-8 h-8 rounded object-cover" />
+                      ) : (
+                        <span className="text-sm font-bold text-[#71717A]">
+                          {playerName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    {/* Nome + link para perfil */}
+                    <div className="flex flex-col">
+                      {profileId ? (
+                        <Link
+                          href={`/campeonatos/jogador/${profileId}`}
+                          className="text-sm text-[#F5F5DC] font-medium hover:text-[#A855F7] transition-colors"
+                        >
+                          {playerName}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-[#F5F5DC] font-medium">{playerName}</span>
+                      )}
+                      {tp.role && (
+                        <span className="text-[9px] font-mono text-[#71717A] uppercase">{tp.role}</span>
+                      )}
+                    </div>
+                    {/* Indicador online */}
+                    {isOnline && (
+                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse ml-auto" title="No servidor" />
+                    )}
+                  </div>
+                </td>
+                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                </td>
+                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                </td>
+                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                </td>
+                <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
+                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                </td>
+                <td className="text-right px-4 py-2.5 border-l border-[#27272A]">
+                  <span className="text-sm font-bold font-mono text-[#71717A]">-</span>
+                </td>
+              </tr>
+            );
+          })}
+          {teamPlayers.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-4 py-8 text-center text-sm text-[#71717A]">
+                Sem jogadores cadastrados
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Página principal da partida
 export default function MatchPage() {
   const params = useParams();
   const router = useRouter();
   const matchId = params.matchId as string;
+
+  // Dados do Supabase (pré-partida)
+  const [dbMatch, setDbMatch] = useState<SupabaseMatchData | null>(null);
+  const [team1Players, setTeam1Players] = useState<SupabasePlayer[]>([]);
+  const [team2Players, setTeam2Players] = useState<SupabasePlayer[]>([]);
+  const [dbLoading, setDbLoading] = useState(true);
+  const [dbError, setDbError] = useState(false);
 
   const {
     matchState,
@@ -1144,22 +1429,80 @@ export default function MatchPage() {
     phase,
   } = useGOTV({ matchId });
 
+  // Buscar dados da partida no Supabase
+  useEffect(() => {
+    async function fetchMatchData() {
+      try {
+        const { data: match, error } = await supabase
+          .from("matches")
+          .select(`
+            id, status, scheduled_at, round, best_of, team1_score, team2_score,
+            team1:teams!matches_team1_id_fkey(id, name, tag, logo_url),
+            team2:teams!matches_team2_id_fkey(id, name, tag, logo_url),
+            tournament:tournaments!matches_tournament_id_fkey(name)
+          `)
+          .eq("id", matchId)
+          .single();
+
+        if (error || !match) {
+          setDbError(true);
+          setDbLoading(false);
+          return;
+        }
+
+        setDbMatch(match as unknown as SupabaseMatchData);
+
+        // Buscar jogadores dos dois times em paralelo
+        const team1Id = (match.team1 as unknown as { id: string })?.id;
+        const team2Id = (match.team2 as unknown as { id: string })?.id;
+
+        const [t1, t2] = await Promise.all([
+          team1Id
+            ? supabase
+                .from("team_players")
+                .select("profile_id, role, steam_id, nickname, profiles(id, username, avatar_url, level, steam_id)")
+                .eq("team_id", team1Id)
+                .eq("is_active", true)
+            : Promise.resolve({ data: [] }),
+          team2Id
+            ? supabase
+                .from("team_players")
+                .select("profile_id, role, steam_id, nickname, profiles(id, username, avatar_url, level, steam_id)")
+                .eq("team_id", team2Id)
+                .eq("is_active", true)
+            : Promise.resolve({ data: [] }),
+        ]);
+
+        setTeam1Players((t1.data || []) as unknown as SupabasePlayer[]);
+        setTeam2Players((t2.data || []) as unknown as SupabasePlayer[]);
+      } catch {
+        setDbError(true);
+      } finally {
+        setDbLoading(false);
+      }
+    }
+
+    fetchMatchData();
+  }, [matchId]);
+
+  // Set de steamIds online (jogadores conectados ao GOTV)
+  const onlineSteamIds = new Set(
+    players.filter(p => p.steamId && p.steamId !== "0").map(p => p.steamId)
+  );
+
   // Determinar nomes dos times (preferir team1/team2 do MatchZy quando disponíveis)
   const getTeamName = (side: 'CT' | 'T', fallback: string) => {
-    // Se temos team1/team2 do MatchZy, usar baseado no lado atual
     if (team1 && team2) {
       if (team1.currentSide === side) return team1.name;
       if (team2.currentSide === side) return team2.name;
     }
-    // Fallback para teamCT/teamT do GOTV
     if (side === 'CT' && matchState?.teamCT?.name) return matchState.teamCT.name;
     if (side === 'T' && matchState?.teamT?.name) return matchState.teamT.name;
     return fallback;
   };
 
-  const teamCTName = getTeamName('CT', 'Counter-Terrorists');
-  const teamTName = getTeamName('T', 'Terrorists');
-
+  const teamCTName = getTeamName('CT', dbMatch?.team1?.name || 'Counter-Terrorists');
+  const teamTName = getTeamName('T', dbMatch?.team2?.name || 'Terrorists');
 
   // Ordenar jogadores por kills
   const sortedPlayersCT = players
@@ -1170,20 +1513,71 @@ export default function MatchPage() {
     .filter((p) => p.team === "T")
     .sort((a, b) => b.kills - a.kills);
 
-  // Estado de carregamento
-  if (isConnecting) {
+  // Estado de carregamento inicial (Supabase + GOTV)
+  // Esperar tanto o Supabase quanto a primeira tentativa do GOTV antes de decidir qual view mostrar
+  if (dbLoading || (isConnecting && !matchState)) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-[#A855F7] border-t-transparent rounded-full animate-spin" />
-          <span className="text-[#A1A1AA] font-mono text-sm">Conectando à partida...</span>
+          <span className="text-[#A1A1AA] font-mono text-sm">Carregando partida...</span>
         </div>
       </div>
     );
   }
 
-  // Partida não encontrada ou servidor offline
-  if (!matchState && !isConnecting) {
+  // Partida realmente não encontrada no banco
+  if (dbError && !dbMatch && !matchState) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
+        <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
+          <div className="h-full flex items-center justify-between px-6">
+            <Link href="/campeonatos" className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
+                <span className="font-display text-[#A855F7] text-lg">O</span>
+              </div>
+              <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
+                ORBITAL ROXA
+              </span>
+            </Link>
+          </div>
+        </header>
+        <main className="flex-1 pt-20 pb-8 px-6 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#27272A] flex items-center justify-center">
+              <svg className="w-10 h-10 text-[#A1A1AA]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h1 className="font-display text-2xl text-[#F5F5DC] mb-2">Partida não encontrada</h1>
+            <p className="text-[#A1A1AA] text-sm mb-6">
+              A partida pode ter sido removida ou o link está incorreto.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => router.back()}
+                className="px-4 py-2 bg-[#27272A] text-[#F5F5DC] rounded-lg font-mono text-sm hover:bg-[#3f3f46] transition-colors"
+              >
+                Voltar
+              </button>
+              <Link
+                href="/campeonatos"
+                className="px-4 py-2 bg-[#A855F7] text-white rounded-lg font-mono text-sm hover:bg-[#9333EA] transition-colors"
+              >
+                Ver campeonatos
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // === PRÉ-PARTIDA: Temos dados do Supabase mas sem GOTV (partida ainda não começou) ===
+  if (!matchState && dbMatch) {
+    const scheduledDate = dbMatch.scheduled_at ? new Date(dbMatch.scheduled_at) : null;
+    const roundLabel = dbMatch.round?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || '';
+
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
         {/* Header */}
@@ -1197,34 +1591,136 @@ export default function MatchPage() {
                 ORBITAL ROXA
               </span>
             </Link>
+
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <Link href="/campeonatos" className="text-[#A1A1AA] hover:text-[#F5F5DC]">CAMPEONATOS</Link>
+              <span className="text-[#A1A1AA]">/</span>
+              <span className="text-[#A855F7]">PARTIDA</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-yellow-500/20 border border-yellow-500/50 text-yellow-500">
+                <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                {dbMatch.status === 'live' ? 'AO VIVO' : 'AGENDADA'}
+              </span>
+            </div>
           </div>
         </header>
 
-        <main className="flex-1 pt-20 pb-8 px-6 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#27272A] flex items-center justify-center">
-              <svg className="w-10 h-10 text-[#A1A1AA]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+        {/* Conteúdo pré-partida */}
+        <main className="flex-1 pt-20 pb-8 px-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+
+            {/* Placar principal pré-partida */}
+            <div className="bg-[#0f0f15] border border-[#27272A] rounded-xl p-6">
+              {/* Torneio e round */}
+              <div className="text-center mb-4">
+                {dbMatch.tournament?.name && (
+                  <span className="text-[#A855F7] text-xs font-mono uppercase tracking-wider">
+                    {dbMatch.tournament.name}
+                  </span>
+                )}
+                {roundLabel && (
+                  <span className="text-[#71717A] text-xs font-mono ml-2">
+                    {roundLabel}
+                  </span>
+                )}
+                {dbMatch.best_of > 1 && (
+                  <span className="text-[#52525B] text-xs font-mono ml-2">
+                    BO{dbMatch.best_of}
+                  </span>
+                )}
+              </div>
+
+              {/* Times vs Times */}
+              <div className="flex items-center justify-center gap-8">
+                {/* Time 1 */}
+                <div className="flex flex-col items-center gap-2 flex-1">
+                  <div className="w-16 h-16 rounded-lg bg-[#1a1a2e] border border-[#27272A] flex items-center justify-center overflow-hidden">
+                    {dbMatch.team1?.logo_url ? (
+                      <img src={dbMatch.team1.logo_url} alt={dbMatch.team1.name} className="w-12 h-12 object-contain" />
+                    ) : (
+                      <span className="font-display text-2xl text-[#3b82f6]">
+                        {dbMatch.team1?.tag?.charAt(0) || '?'}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-display text-lg text-[#F5F5DC]">{dbMatch.team1?.name || 'TBD'}</span>
+                  {dbMatch.team1?.tag && (
+                    <span className="text-[10px] font-mono text-[#71717A]">{dbMatch.team1.tag}</span>
+                  )}
+                </div>
+
+                {/* Score / VS */}
+                <div className="flex flex-col items-center gap-1">
+                  {dbMatch.status === 'finished' ? (
+                    <div className="flex items-center gap-3">
+                      <span className="font-display text-4xl text-[#F5F5DC]">{dbMatch.team1_score}</span>
+                      <span className="text-[#71717A] text-lg">:</span>
+                      <span className="font-display text-4xl text-[#F5F5DC]">{dbMatch.team2_score}</span>
+                    </div>
+                  ) : (
+                    <span className="font-display text-3xl text-[#71717A]">VS</span>
+                  )}
+                  {scheduledDate && dbMatch.status !== 'finished' && (
+                    <div className="flex flex-col items-center gap-0.5 mt-2">
+                      <span className="text-[#A1A1AA] text-xs font-mono">
+                        {scheduledDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      </span>
+                      <span className="text-[#F5F5DC] text-sm font-mono font-bold">
+                        {scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Time 2 */}
+                <div className="flex flex-col items-center gap-2 flex-1">
+                  <div className="w-16 h-16 rounded-lg bg-[#1a1a2e] border border-[#27272A] flex items-center justify-center overflow-hidden">
+                    {dbMatch.team2?.logo_url ? (
+                      <img src={dbMatch.team2.logo_url} alt={dbMatch.team2.name} className="w-12 h-12 object-contain" />
+                    ) : (
+                      <span className="font-display text-2xl text-[#f59e0b]">
+                        {dbMatch.team2?.tag?.charAt(0) || '?'}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-display text-lg text-[#F5F5DC]">{dbMatch.team2?.name || 'TBD'}</span>
+                  {dbMatch.team2?.tag && (
+                    <span className="text-[10px] font-mono text-[#71717A]">{dbMatch.team2.tag}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Status indicator */}
+              {isConnecting && (
+                <div className="text-center mt-4">
+                  <span className="inline-flex items-center gap-2 text-xs font-mono text-[#A1A1AA]">
+                    <span className="w-3 h-3 border-2 border-[#A855F7] border-t-transparent rounded-full animate-spin" />
+                    Conectando ao servidor...
+                  </span>
+                </div>
+              )}
             </div>
-            <h1 className="font-display text-2xl text-[#F5F5DC] mb-2">Partida não encontrada</h1>
-            <p className="text-[#A1A1AA] text-sm mb-6">
-              A partida pode ter terminado ou o servidor está offline.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => router.back()}
-                className="px-4 py-2 bg-[#27272A] text-[#F5F5DC] rounded-lg font-mono text-sm hover:bg-[#3f3f46] transition-colors"
-              >
-                Voltar
-              </button>
-              <Link
-                href="/campeonatos/ao-vivo"
-                className="px-4 py-2 bg-[#A855F7] text-white rounded-lg font-mono text-sm hover:bg-[#9333EA] transition-colors"
-              >
-                Ver partidas ao vivo
-              </Link>
+
+            {/* Tabelas de jogadores */}
+            <div className="space-y-4">
+              <PreMatchPlayerTable
+                teamPlayers={team1Players}
+                teamName={dbMatch.team1?.name || 'Time 1'}
+                teamLogo={dbMatch.team1?.logo_url || null}
+                teamSide="CT"
+                onlineSteamIds={onlineSteamIds}
+              />
+              <PreMatchPlayerTable
+                teamPlayers={team2Players}
+                teamName={dbMatch.team2?.name || 'Time 2'}
+                teamLogo={dbMatch.team2?.logo_url || null}
+                teamSide="T"
+                onlineSteamIds={onlineSteamIds}
+              />
             </div>
+
           </div>
         </main>
       </div>
@@ -1345,6 +1841,8 @@ export default function MatchPage() {
                   teamName={teamCTName}
                   teamSide="CT"
                   currentRound={matchState?.currentRound || 1}
+                  dbPlayers={teamCTName === dbMatch?.team1?.name ? team1Players : teamCTName === dbMatch?.team2?.name ? team2Players : undefined}
+                  teamLogo={teamCTName === dbMatch?.team1?.name ? dbMatch?.team1?.logo_url : teamCTName === dbMatch?.team2?.name ? dbMatch?.team2?.logo_url : null}
                 />
 
                 {/* T Scoreboard */}
@@ -1353,6 +1851,8 @@ export default function MatchPage() {
                   teamName={teamTName}
                   teamSide="T"
                   currentRound={matchState?.currentRound || 1}
+                  dbPlayers={teamTName === dbMatch?.team2?.name ? team2Players : teamTName === dbMatch?.team1?.name ? team1Players : undefined}
+                  teamLogo={teamTName === dbMatch?.team2?.name ? dbMatch?.team2?.logo_url : teamTName === dbMatch?.team1?.name ? dbMatch?.team1?.logo_url : null}
                 />
               </div>
             </div>

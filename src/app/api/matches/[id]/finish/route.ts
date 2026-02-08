@@ -173,6 +173,34 @@ async function checkAndActivateMatch(tournamentId: string, round: string) {
   }
 }
 
+// Helper para enviar comando via Pterodactyl API
+async function sendPterodactylCommand(cmd: string) {
+  const pterodactylUrl = process.env.PTERODACTYL_API_URL;
+  const pterodactylKey = process.env.PTERODACTYL_API_KEY;
+  const serverId = process.env.PTERODACTYL_SERVER_ID;
+
+  const resp = await fetch(
+    `${pterodactylUrl}/api/client/servers/${serverId}/command`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${pterodactylKey}`,
+        "Content-Type": "application/json",
+        "Accept": "application/vnd.pterodactyl.v1+json",
+      },
+      body: JSON.stringify({ command: cmd }),
+    }
+  );
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    console.error(`[AutoLoad] Pterodactyl error for "${cmd}":`, resp.status, errorText);
+    throw new Error(`Erro ao enviar comando: ${resp.status}`);
+  }
+
+  return resp;
+}
+
 // Envia automaticamente o comando matchzy_loadmatch_url para o servidor CS2
 async function autoLoadMatchOnServer(matchId: string) {
   const pterodactylUrl = process.env.PTERODACTYL_API_URL;
@@ -186,30 +214,21 @@ async function autoLoadMatchOnServer(matchId: string) {
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://orbital-store.vercel.app").trim();
   const configUrl = `${siteUrl}/api/matches/${matchId}/config`;
-  const command = `matchzy_loadmatch_url "${configUrl}"`;
 
   try {
-    const resp = await fetch(
-      `${pterodactylUrl}/api/client/servers/${serverId}/command`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${pterodactylKey}`,
-          "Content-Type": "application/json",
-          "Accept": "application/vnd.pterodactyl.v1+json",
-        },
-        body: JSON.stringify({ command }),
-      }
-    );
+    // 1. Encerrar partida anterior (MatchZy rejeita loadmatch se já tem partida ativa)
+    await sendPterodactylCommand("css_endmatch");
+    console.log("[AutoLoad] css_endmatch enviado");
 
-    if (!resp.ok) {
-      const errorText = await resp.text();
-      console.error("[AutoLoad] Pterodactyl error:", resp.status, errorText);
-      return;
-    }
+    // 2. Aguardar MatchZy processar o endmatch
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
-    console.log(`[AutoLoad] Partida ${matchId} carregada automaticamente no servidor: ${command}`);
+    // 3. Carregar nova partida via URL
+    const loadCommand = `matchzy_loadmatch_url "${configUrl}"`;
+    await sendPterodactylCommand(loadCommand);
+
+    console.log(`[AutoLoad] Partida ${matchId} carregada automaticamente no servidor: ${loadCommand}`);
   } catch (error) {
-    console.error("[AutoLoad] Falha ao enviar comando:", error);
+    console.error("[AutoLoad] Falha ao carregar partida:", error);
   }
 }

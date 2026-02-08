@@ -37,10 +37,6 @@ export async function POST(
     return NextResponse.json({ error: "Partida não encontrada" }, { status: 404 });
   }
 
-  if (match.status === "live") {
-    return NextResponse.json({ error: "Partida já está ao vivo" }, { status: 400 });
-  }
-
   if (match.status === "finished") {
     return NextResponse.json({ error: "Partida já finalizada" }, { status: 400 });
   }
@@ -49,10 +45,8 @@ export async function POST(
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://orbital-store.vercel.app").trim();
   const configUrl = `${siteUrl}/api/matches/${matchId}/config`;
 
-  // Enviar comando para o servidor CS2 via Pterodactyl
-  const command = `matchzy_loadmatch_url "${configUrl}"`;
-
-  try {
+  // Helper para enviar comando via Pterodactyl
+  const sendCommand = async (cmd: string) => {
     const resp = await fetch(
       `${pterodactylUrl}/api/client/servers/${serverId}/command`,
       {
@@ -62,25 +56,34 @@ export async function POST(
           "Content-Type": "application/json",
           "Accept": "application/vnd.pterodactyl.v1+json",
         },
-        body: JSON.stringify({ command }),
+        body: JSON.stringify({ command: cmd }),
       }
     );
-
     if (!resp.ok) {
       const errorText = await resp.text();
-      console.error("[LoadServer] Pterodactyl error:", resp.status, errorText);
-      return NextResponse.json(
-        { error: `Erro ao enviar comando: ${resp.status}` },
-        { status: 502 }
-      );
+      console.error(`[LoadServer] Pterodactyl error for "${cmd}":`, resp.status, errorText);
+      throw new Error(`Erro ao enviar comando: ${resp.status}`);
     }
+    return resp;
+  };
 
-    console.log(`[LoadServer] Comando enviado para o servidor: ${command}`);
+  try {
+    // 1. Encerrar partida anterior (css_endmatch é o comando correto do CounterStrikeSharp)
+    await sendCommand("css_endmatch");
+    console.log("[LoadServer] css_endmatch enviado");
+
+    // 2. Aguardar o MatchZy processar o endmatch antes de carregar nova partida
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // 3. Carregar nova partida via URL
+    const loadCommand = `matchzy_loadmatch_url "${configUrl}"`;
+    await sendCommand(loadCommand);
+    console.log(`[LoadServer] Comando enviado para o servidor: ${loadCommand}`);
 
     return NextResponse.json({
       success: true,
       message: "Partida carregada no servidor",
-      command,
+      command: loadCommand,
     });
   } catch (error) {
     console.error("[LoadServer] Fetch error:", error);

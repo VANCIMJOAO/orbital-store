@@ -25,6 +25,35 @@ type MatchZyEvent = {
   [key: string]: unknown;
 };
 
+// Cache de resolução de matchId numérico → UUID
+const matchIdCache = new Map<string, string>();
+
+// Resolver matchId numérico para UUID do Supabase
+async function resolveMatchId(rawMatchId: string): Promise<string | null> {
+  // Se já é UUID (contém "-"), retornar direto
+  if (rawMatchId.includes("-")) return rawMatchId;
+
+  // Verificar cache
+  const cached = matchIdCache.get(rawMatchId);
+  if (cached) return cached;
+
+  // É numérico - buscar no banco pelo matchzy_config->matchid
+  const { data } = await supabase
+    .from("matches")
+    .select("id")
+    .filter("matchzy_config->>matchid", "eq", rawMatchId)
+    .single();
+
+  if (data?.id) {
+    matchIdCache.set(rawMatchId, data.id);
+    console.log(`[MatchZy Webhook] Resolved matchId ${rawMatchId} → ${data.id}`);
+    return data.id;
+  }
+
+  console.error(`[MatchZy Webhook] Failed to resolve matchId: ${rawMatchId}`);
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticação
@@ -35,7 +64,17 @@ export async function POST(request: NextRequest) {
     }
 
     const event: MatchZyEvent = await request.json();
-    console.log("[MatchZy Webhook] Received event:", event.event, event);
+    console.log("[MatchZy Webhook] Received event:", event.event, "matchid:", event.matchid);
+
+    // Resolver matchId numérico para UUID antes de processar
+    if (event.matchid) {
+      const resolvedId = await resolveMatchId(String(event.matchid));
+      if (!resolvedId) {
+        console.error("[MatchZy Webhook] Could not resolve matchId:", event.matchid);
+        return NextResponse.json({ error: "Match not found" }, { status: 404 });
+      }
+      event.matchid = resolvedId;
+    }
 
     // Processar evento baseado no tipo
     switch (event.event) {
@@ -91,11 +130,11 @@ async function handleGoingLive(event: MatchZyEvent) {
     .single();
 
   if (error) {
-    console.error("[MatchZy] Error updating match to live:", error);
+    console.error("[MatchZy Webhook] Error updating match to live:", error);
     return;
   }
 
-  console.log("[MatchZy] Match going live:", matchId);
+  console.log("[MatchZy Webhook] Match going live:", matchId);
 
   // Verificar se houve atraso e propagar para partidas seguintes
   if (match?.scheduled_at) {
@@ -103,8 +142,7 @@ async function handleGoingLive(event: MatchZyEvent) {
     const delayMinutes = Math.floor((now.getTime() - scheduledTime.getTime()) / 60000);
 
     if (delayMinutes > 5) {
-      // Mais de 5 minutos de atraso
-      console.log(`[MatchZy] Match ${matchId} started ${delayMinutes} minutes late, propagating delay`);
+      console.log(`[MatchZy Webhook] Match ${matchId} started ${delayMinutes} minutes late, propagating delay`);
       await propagateDelay(match.tournament_id, matchId, delayMinutes);
     }
   }
@@ -125,10 +163,8 @@ async function handleRoundEnd(event: MatchZyEvent) {
     .eq("id", matchId);
 
   if (error) {
-    console.error("[MatchZy] Error updating scores:", error);
+    console.error("[MatchZy Webhook] Error updating scores:", error);
   }
-
-  // TODO: Salvar dados do round na tabela match_rounds
 }
 
 // Mapa terminou
@@ -136,23 +172,72 @@ async function handleMapResult(event: MatchZyEvent) {
   const matchId = event.matchid;
   if (!matchId) return;
 
-  // Atualizar placar final do mapa
-  const { error } = await supabase
+  const team1Score = event.team1?.score || 0;
+  const team2Score = event.team2?.score || 0;
+
+  // Buscar partida atual para saber best_of e maps_won
+  const { data: match, error: fetchError } = await supabase
+    .from("matches")
+    .select("best_of, maps_won_team1, maps_won_team2, current_map_index")
+    .eq("id", matchId)
+    .single();
+
+  if (fetchError || !match) {
+    console.error("[MatchZy Webhook] Error fetching match for map_result:", fetchError);
+    // Fallback: apenas atualizar scores
+    await supabase
+      .from("matches")
+      .update({ team1_score: team1Score, team2_score: team2Score })
+      .eq("id", matchId);
+    return;
+  }
+
+  const mapWinner = team1Score > team2Score ? "team1" : "team2";
+  const newMapsWonTeam1 = (match.maps_won_team1 || 0) + (mapWinner === "team1" ? 1 : 0);
+  const newMapsWonTeam2 = (match.maps_won_team2 || 0) + (mapWinner === "team2" ? 1 : 0);
+  const newMapIndex = (match.current_map_index || 0) + 1;
+
+  // Atualizar scores e maps_won
+  const { error: updateError } = await supabase
     .from("matches")
     .update({
-      team1_score: event.team1?.score || 0,
-      team2_score: event.team2?.score || 0,
+      team1_score: team1Score,
+      team2_score: team2Score,
+      maps_won_team1: newMapsWonTeam1,
+      maps_won_team2: newMapsWonTeam2,
+      current_map_index: newMapIndex,
     })
     .eq("id", matchId);
 
-  if (error) {
-    console.error("[MatchZy] Error updating map result:", error);
+  if (updateError) {
+    console.error("[MatchZy Webhook] Error updating map result:", updateError);
   }
 
-  console.log("[MatchZy] Map result for match:", matchId, event.team1?.score, "-", event.team2?.score);
+  console.log(
+    `[MatchZy Webhook] Map ${newMapIndex} result: ${team1Score}-${team2Score} (winner: ${mapWinner}). ` +
+    `Series: ${newMapsWonTeam1}-${newMapsWonTeam2} (Bo${match.best_of || 1})`
+  );
+
+  // Se Bo1, a partida terminou com este mapa
+  if ((match.best_of || 1) <= 1) {
+    console.log("[MatchZy Webhook] Bo1 map finished, triggering series end");
+    await handleSeriesEnd(event);
+    return;
+  }
+
+  // Se Bo3/Bo5, verificar se alguém já ganhou a maioria dos mapas
+  const mapsNeeded = Math.ceil((match.best_of || 1) / 2);
+  if (newMapsWonTeam1 >= mapsNeeded || newMapsWonTeam2 >= mapsNeeded) {
+    console.log(`[MatchZy Webhook] Series decided: ${newMapsWonTeam1}-${newMapsWonTeam2}, triggering series end`);
+    await handleSeriesEnd(event);
+    return;
+  }
+
+  // Série continua - MatchZy carrega o próximo mapa automaticamente da maplist
+  console.log(`[MatchZy Webhook] Series continues, next map ${newMapIndex + 1} of Bo${match.best_of}`);
 }
 
-// Série terminou (BO3, BO5, etc)
+// Série terminou (BO1 via map_result, ou BO3/BO5 via series_end)
 async function handleSeriesEnd(event: MatchZyEvent) {
   const matchId = event.matchid;
   if (!matchId) return;
@@ -165,7 +250,13 @@ async function handleSeriesEnd(event: MatchZyEvent) {
     .single();
 
   if (fetchError || !match) {
-    console.error("[MatchZy] Error fetching match:", fetchError);
+    console.error("[MatchZy Webhook] Error fetching match for series_end:", fetchError);
+    return;
+  }
+
+  // Evitar finalizar duas vezes (GOTV server também chama /finish)
+  if (match.status === "finished") {
+    console.log("[MatchZy Webhook] Match already finished, skipping:", matchId);
     return;
   }
 
@@ -186,20 +277,25 @@ async function handleSeriesEnd(event: MatchZyEvent) {
     .eq("id", matchId);
 
   if (updateError) {
-    console.error("[MatchZy] Error finishing match:", updateError);
+    console.error("[MatchZy Webhook] Error finishing match:", updateError);
     return;
   }
 
-  console.log("[MatchZy] Match finished:", matchId, "Winner:", winnerId);
+  console.log(
+    `[MatchZy Webhook] Match FINISHED: ${matchId} | ` +
+    `Score: ${match.team1_score}-${match.team2_score} | ` +
+    `Winner: ${winnerId}`
+  );
 
   // Avançar times no bracket
-  await advanceTeamsInBracket(match.tournament_id, match.round, winnerId, loserId);
+  if (match.tournament_id && match.round) {
+    await advanceTeamsInBracket(match.tournament_id, match.round, winnerId!, loserId!);
+  }
 }
 
 // Time escolheu lado
 async function handleSidePicked(event: MatchZyEvent) {
-  // Log para debug, pode ser usado para UI em tempo real
-  console.log("[MatchZy] Side picked:", event);
+  console.log("[MatchZy Webhook] Side picked:", event);
 }
 
 // Propagar atraso para partidas seguintes
@@ -214,7 +310,7 @@ async function propagateDelay(tournamentId: string, currentMatchId: string, dela
     .order("scheduled_at", { ascending: true });
 
   if (error || !futureMatches) {
-    console.error("[MatchZy] Error fetching future matches:", error);
+    console.error("[MatchZy Webhook] Error fetching future matches:", error);
     return;
   }
 
@@ -231,7 +327,7 @@ async function propagateDelay(tournamentId: string, currentMatchId: string, dela
         .update({ scheduled_at: newTime.toISOString() })
         .eq("id", match.id);
 
-      console.log(`[MatchZy] Adjusted match ${match.id} time by ${adjustedDelay} minutes`);
+      console.log(`[MatchZy Webhook] Adjusted match ${match.id} time by ${adjustedDelay} minutes`);
     }
   }
 }
@@ -243,97 +339,77 @@ async function advanceTeamsInBracket(
   winnerId: string,
   loserId: string
 ) {
-  // Mapa de avanço do bracket double elimination (8 times)
-  const bracketAdvancement: Record<string, { winnerGoesTo: string; loserGoesTo?: string; position: "team1" | "team2" }> = {
-    // Winner Bracket Quartas -> Semis
-    winner_quarter_1: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", position: "team1" },
-    winner_quarter_2: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", position: "team2" },
-    winner_quarter_3: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", position: "team1" },
-    winner_quarter_4: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", position: "team2" },
+  // Usar a mesma tabela de avanço do finish endpoint para consistência
+  const bracketAdvancement: Record<string, { winnerGoesTo: string; loserGoesTo?: string; winnerPosition: "team1" | "team2"; loserPosition?: "team1" | "team2" }> = {
+    // Winner Bracket Quartas
+    winner_quarter_1: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", winnerPosition: "team1", loserPosition: "team1" },
+    winner_quarter_2: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", winnerPosition: "team2", loserPosition: "team2" },
+    winner_quarter_3: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", winnerPosition: "team1", loserPosition: "team1" },
+    winner_quarter_4: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", winnerPosition: "team2", loserPosition: "team2" },
 
-    // Winner Bracket Semis -> Final
-    winner_semi_1: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_1", position: "team1" },
-    winner_semi_2: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_2", position: "team1" },
+    // Winner Bracket Semis
+    winner_semi_1: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_1", winnerPosition: "team1", loserPosition: "team1" },
+    winner_semi_2: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_2", winnerPosition: "team2", loserPosition: "team1" },
 
-    // Winner Final -> Grand Final
-    winner_final: { winnerGoesTo: "grand_final", loserGoesTo: "loser_final", position: "team1" },
+    // Winner Final
+    winner_final: { winnerGoesTo: "grand_final", loserGoesTo: "loser_final", winnerPosition: "team1", loserPosition: "team1" },
 
-    // Loser Bracket Round 1 -> Round 2
-    loser_round1_1: { winnerGoesTo: "loser_round2_1", position: "team2" },
-    loser_round1_2: { winnerGoesTo: "loser_round2_2", position: "team2" },
+    // Loser Bracket Round 1
+    loser_round1_1: { winnerGoesTo: "loser_round2_1", winnerPosition: "team2" },
+    loser_round1_2: { winnerGoesTo: "loser_round2_2", winnerPosition: "team2" },
 
-    // Loser Bracket Round 2 -> Semi
-    loser_round2_1: { winnerGoesTo: "loser_semi", position: "team1" },
-    loser_round2_2: { winnerGoesTo: "loser_semi", position: "team2" },
+    // Loser Bracket Round 2
+    loser_round2_1: { winnerGoesTo: "loser_semi", winnerPosition: "team1" },
+    loser_round2_2: { winnerGoesTo: "loser_semi", winnerPosition: "team2" },
 
-    // Loser Semi -> Loser Final
-    loser_semi: { winnerGoesTo: "loser_final", position: "team2" },
+    // Loser Semi
+    loser_semi: { winnerGoesTo: "loser_final", winnerPosition: "team2" },
 
-    // Loser Final -> Grand Final
-    loser_final: { winnerGoesTo: "grand_final", position: "team2" },
+    // Loser Final
+    loser_final: { winnerGoesTo: "grand_final", winnerPosition: "team2" },
   };
 
   const advancement = bracketAdvancement[currentRound];
   if (!advancement) {
-    console.log("[MatchZy] No advancement mapping for round:", currentRound);
+    console.log("[MatchZy Webhook] No advancement mapping for round:", currentRound);
     return;
   }
 
   // Avançar vencedor
   if (advancement.winnerGoesTo) {
-    const updateField = advancement.position === "team1" ? "team1_id" : "team2_id";
+    const winnerField = advancement.winnerPosition === "team1" ? "team1_id" : "team2_id";
 
     const { error: winnerError } = await supabase
       .from("matches")
-      .update({ [updateField]: winnerId })
+      .update({ [winnerField]: winnerId })
       .eq("tournament_id", tournamentId)
       .eq("round", advancement.winnerGoesTo);
 
     if (winnerError) {
-      console.error("[MatchZy] Error advancing winner:", winnerError);
+      console.error("[MatchZy Webhook] Error advancing winner:", winnerError);
     } else {
-      console.log(`[MatchZy] Advanced winner ${winnerId} to ${advancement.winnerGoesTo}`);
+      console.log(`[MatchZy Webhook] Advanced winner ${winnerId} to ${advancement.winnerGoesTo} as ${advancement.winnerPosition}`);
     }
 
-    // Verificar se a partida de destino agora tem ambos os times
     await checkAndActivateMatch(tournamentId, advancement.winnerGoesTo);
   }
 
-  // Enviar perdedor para o loser bracket (se aplicável)
-  if (advancement.loserGoesTo) {
-    // Determinar posição do perdedor no loser bracket
-    let loserPosition: "team1" | "team2" = "team1";
-
-    // Regras específicas para onde o perdedor vai
-    if (currentRound.startsWith("winner_quarter")) {
-      // Perdedores das quartas vão para loser R1
-      loserPosition = currentRound.includes("1") || currentRound.includes("2") ? "team1" : "team2";
-      if (currentRound === "winner_quarter_2" || currentRound === "winner_quarter_4") {
-        loserPosition = "team2";
-      }
-    } else if (currentRound.startsWith("winner_semi")) {
-      // Perdedores das semis vão para loser R2
-      loserPosition = "team1";
-    } else if (currentRound === "winner_final") {
-      // Perdedor da winner final vai para loser final
-      loserPosition = "team1";
-    }
-
-    const loserUpdateField = loserPosition === "team1" ? "team1_id" : "team2_id";
+  // Enviar perdedor para loser bracket
+  if (advancement.loserGoesTo && advancement.loserPosition) {
+    const loserField = advancement.loserPosition === "team1" ? "team1_id" : "team2_id";
 
     const { error: loserError } = await supabase
       .from("matches")
-      .update({ [loserUpdateField]: loserId })
+      .update({ [loserField]: loserId })
       .eq("tournament_id", tournamentId)
       .eq("round", advancement.loserGoesTo);
 
     if (loserError) {
-      console.error("[MatchZy] Error sending loser to bracket:", loserError);
+      console.error("[MatchZy Webhook] Error sending loser to bracket:", loserError);
     } else {
-      console.log(`[MatchZy] Sent loser ${loserId} to ${advancement.loserGoesTo}`);
+      console.log(`[MatchZy Webhook] Sent loser ${loserId} to ${advancement.loserGoesTo} as ${advancement.loserPosition}`);
     }
 
-    // Verificar se a partida de destino agora tem ambos os times
     await checkAndActivateMatch(tournamentId, advancement.loserGoesTo);
   }
 }
@@ -349,50 +425,13 @@ async function checkAndActivateMatch(tournamentId: string, round: string) {
 
   if (error || !match) return;
 
-  // Buscar IDs dos times placeholder (primeiro e segundo time do torneio)
-  const { data: tournamentTeams } = await supabase
-    .from("tournament_teams")
-    .select("team_id")
-    .eq("tournament_id", tournamentId)
-    .order("seed", { ascending: true })
-    .limit(2);
-
-  if (!tournamentTeams || tournamentTeams.length < 2) return;
-
-  const placeholderIds = tournamentTeams.map((t) => t.team_id);
-
-  // Verificar se ambos os times são reais (não placeholders)
-  const team1IsReal = match.team1_id && !placeholderIds.includes(match.team1_id);
-  const team2IsReal = match.team2_id && !placeholderIds.includes(match.team2_id);
-
-  // Se a partida ainda usa placeholders, verificar se já tem times reais
-  // (isso acontece quando os times são atualizados pelo avanço do bracket)
-  if (match.status === "pending") {
-    // Buscar novamente para pegar valores atualizados
-    const { data: updatedMatch } = await supabase
+  if (match.status === "pending" && match.team1_id && match.team2_id && match.team1_id !== match.team2_id) {
+    await supabase
       .from("matches")
-      .select("team1_id, team2_id")
-      .eq("id", match.id)
-      .single();
+      .update({ status: "scheduled" })
+      .eq("id", match.id);
 
-    if (updatedMatch) {
-      // Verificar se ambos os times são diferentes dos placeholders originais
-      // e se são diferentes entre si
-      const hasRealTeams =
-        updatedMatch.team1_id !== updatedMatch.team2_id &&
-        updatedMatch.team1_id &&
-        updatedMatch.team2_id;
-
-      if (hasRealTeams) {
-        // Ativar partida
-        await supabase
-          .from("matches")
-          .update({ status: "scheduled" })
-          .eq("id", match.id);
-
-        console.log(`[MatchZy] Activated match ${match.id} (${round}) with both teams ready`);
-      }
-    }
+    console.log(`[MatchZy Webhook] Activated match ${match.id} (${round}) - both teams ready`);
   }
 }
 

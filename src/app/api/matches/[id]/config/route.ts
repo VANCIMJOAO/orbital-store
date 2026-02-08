@@ -121,9 +121,20 @@ export async function GET(
       }
     });
 
-    // Determinar mapa - usa o map_name da partida ou default
-    const mapName = match.map_name || 'de_ancient';
+    // Determinar mapas - suporta Bo1 (mapa único) e Bo3/Bo5 (múltiplos mapas)
     const bestOf = match.best_of || 1;
+    let maplist: string[];
+
+    if (bestOf > 1 && match.veto_data) {
+      // Bo3/Bo5: usar mapas definidos no veto
+      const veto = match.veto_data as { maps?: string[] };
+      maplist = veto.maps && veto.maps.length > 0
+        ? veto.maps
+        : [match.map_name || 'de_ancient'];
+    } else {
+      // Bo1: mapa único
+      maplist = [match.map_name || 'de_ancient'];
+    }
 
     // URL do GOTV server para receber eventos
     const gotvServerUrl = (process.env.GOTV_SERVER_URL || 'http://localhost:8080').trim();
@@ -138,7 +149,7 @@ export async function GET(
     const config: MatchZyConfig = {
       matchid: numericMatchId,
       num_maps: bestOf,
-      maplist: [mapName],
+      maplist: maplist,
       skip_veto: true, // Por enquanto, skip veto
       side_type: 'knife', // Knife round para decidir lado
       players_per_team: 5,

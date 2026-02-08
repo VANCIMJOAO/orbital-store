@@ -67,6 +67,8 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false);
+  const failCountRef = useRef(0);
+  const maxReconnectAttempts = 3; // Parar de reconectar após 3 falhas consecutivas sem conexão
 
   // Processar evento de kill para o feed
   const processKillEvent = useCallback((event: GOTVEvent) => {
@@ -201,6 +203,7 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
         isConnectedRef.current = true;
         setIsConnecting(false);
         setError(null);
+        failCountRef.current = 0;
         // Reset kill feed, round history e game log ao conectar para evitar duplicatas
         setKillFeed([]);
         setRoundHistory([]);
@@ -217,10 +220,13 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
 
         if (wasConnected) {
           console.log('[GOTV Hook] Disconnected from match:', matchId);
+          failCountRef.current = 0;
+        } else {
+          failCountRef.current++;
         }
 
-        // Auto-reconnect silenciosamente
-        if (autoReconnect) {
+        // Auto-reconnect: se nunca conectou, parar após maxReconnectAttempts tentativas
+        if (autoReconnect && (wasConnected || failCountRef.current < maxReconnectAttempts)) {
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, reconnectInterval);

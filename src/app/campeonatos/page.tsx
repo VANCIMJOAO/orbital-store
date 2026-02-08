@@ -1112,15 +1112,13 @@ export default function CampeonatosPage() {
                 <div
                   key={partida.id}
                   onClick={() => {
-                    if (partida.status === "live" || partida.status === "finished") {
-                      router.push(`/campeonatos/partida/${partida.id}`);
-                    }
+                    router.push(`/campeonatos/partida/${partida.id}`);
                   }}
-                  className={`bg-[#12121a] border rounded-lg p-3 transition-all group ${
+                  className={`bg-[#12121a] border rounded-lg p-3 transition-all group cursor-pointer ${
                     partida.status === "live"
-                      ? "border-red-500/50 hover:border-red-500 cursor-pointer"
+                      ? "border-red-500/50 hover:border-red-500"
                       : partida.status === "finished"
-                      ? "border-[#22c55e]/30 hover:border-[#22c55e]/50 cursor-pointer"
+                      ? "border-[#22c55e]/30 hover:border-[#22c55e]/50"
                       : "border-[#27272A] hover:border-[#A855F7]/50"
                   }`}
                 >
