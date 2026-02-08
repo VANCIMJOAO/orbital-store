@@ -1,24 +1,93 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState, useMemo } from "react";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { RequireTournamentProfile } from "@/components/RequireTournamentProfile";
 import { useGOTVMatches } from "@/hooks/useGOTV";
+import type { Database } from "@/lib/database.types";
+
+type Match = Database["public"]["Tables"]["matches"]["Row"];
+
+interface MatchWithTeams extends Match {
+  team1: { name: string; tag: string; logo_url: string | null } | null;
+  team2: { name: string; tag: string; logo_url: string | null } | null;
+}
+
+const roundLabels: Record<string, string> = {
+  winner_quarter_1: "Quartas - Winner",
+  winner_quarter_2: "Quartas - Winner",
+  winner_quarter_3: "Quartas - Winner",
+  winner_quarter_4: "Quartas - Winner",
+  winner_semi_1: "Semi-Final",
+  winner_semi_2: "Semi-Final",
+  winner_final: "Final Winner",
+  loser_round1_1: "LR1",
+  loser_round1_2: "LR1",
+  loser_round2_1: "LR2",
+  loser_round2_2: "LR2",
+  loser_semi: "Semi - Loser",
+  loser_final: "Final Loser",
+  grand_final: "Grand Final",
+};
 
 function PartidasContent() {
   const { matches: liveMatches, serverOffline } = useGOTVMatches();
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
-  const partidas = [
-    { id: 1, time1: "FURIA", time2: "Imperial", placar: "1-1", status: "AO VIVO", horario: "", fase: "Semi-Final" },
-    { id: 2, time1: "paiN", time2: "LOUD", placar: null, status: "EM BREVE", horario: "18:00", fase: "Semi-Final" },
-    { id: 3, time1: "TBD", time2: "TBD", placar: null, status: "EM BREVE", horario: "20:30", fase: "Final" },
-  ];
+  const [upcomingMatches, setUpcomingMatches] = useState<MatchWithTeams[]>([]);
+  const [finishedMatches, setFinishedMatches] = useState<MatchWithTeams[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const partidasAnteriores = [
-    { id: 4, time1: "FURIA", time2: "paiN", placar: "2-0", vencedor: "FURIA", data: "03 Fev", fase: "Quartas" },
-    { id: 5, time1: "Imperial", time2: "LOUD", placar: "2-1", vencedor: "Imperial", data: "03 Fev", fase: "Quartas" },
-    { id: 6, time1: "FURIA", time2: "Fluxo", placar: "2-0", vencedor: "FURIA", data: "02 Fev", fase: "Grupos" },
-    { id: 7, time1: "paiN", time2: "RED", placar: "2-1", vencedor: "paiN", data: "02 Fev", fase: "Grupos" },
-  ];
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const { data: tournament } = await supabase
+          .from("tournaments")
+          .select("id")
+          .in("status", ["ongoing", "active", "registration", "upcoming", "draft"])
+          .order("start_date", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!tournament) return;
+
+        // Buscar todas as partidas do torneio
+        const { data: matchesData } = await supabase
+          .from("matches")
+          .select(`
+            *,
+            team1:teams!matches_team1_id_fkey(name, tag, logo_url),
+            team2:teams!matches_team2_id_fkey(name, tag, logo_url)
+          `)
+          .eq("tournament_id", tournament.id)
+          .order("scheduled_at", { ascending: true });
+
+        if (matchesData) {
+          const all = matchesData as unknown as MatchWithTeams[];
+          setUpcomingMatches(all.filter((m) => m.status === "scheduled" || m.status === "live" || m.status === "pending"));
+          setFinishedMatches(all.filter((m) => m.status === "finished").reverse());
+        }
+      } catch (error) {
+        console.error("Error fetching matches:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [supabase]);
+
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return "--:--";
+    return new Date(dateString).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  };
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
@@ -130,74 +199,143 @@ function PartidasContent() {
             </div>
           )}
 
-          {/* Partidas de Hoje */}
-          <h2 className="font-mono text-[#A855F7] text-sm tracking-wider mb-4">HOJE</h2>
-          <div className="space-y-3 mb-8">
-            {partidas.map((partida) => (
-              <Link
-                key={partida.id}
-                href="/campeonatos/partida"
-                className="block bg-[#12121a] border border-[#27272A] rounded-lg p-4 hover:border-[#A855F7]/50 transition-colors"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-[#A1A1AA]">{partida.fase}</span>
-                  {partida.status === "AO VIVO" ? (
-                    <span className="flex items-center gap-1.5 text-xs font-mono text-red-500">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                      AO VIVO
-                    </span>
-                  ) : (
-                    <span className="text-xs font-mono text-[#A1A1AA]">{partida.horario}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-[#27272A] flex items-center justify-center">
-                      <span className="text-[8px] font-mono text-[#A1A1AA]">{partida.time1.slice(0,3).toUpperCase()}</span>
-                    </div>
-                    <span className="text-[#F5F5DC]">{partida.time1}</span>
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-[#A855F7] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <span className="text-xs font-mono text-[#A1A1AA]">Carregando partidas...</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Próximas Partidas */}
+              {upcomingMatches.length > 0 && (
+                <>
+                  <h2 className="font-mono text-[#A855F7] text-sm tracking-wider mb-4">PRÓXIMAS PARTIDAS</h2>
+                  <div className="space-y-3 mb-8">
+                    {upcomingMatches.map((match) => (
+                      <Link
+                        key={match.id}
+                        href={`/campeonatos/partida/${match.id}`}
+                        className={`block bg-[#12121a] border rounded-lg p-4 hover:border-[#A855F7]/50 transition-colors ${
+                          match.status === "live" ? "border-red-500/30" : "border-[#27272A]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-mono text-[#A1A1AA]">
+                            {roundLabels[match.round || ""] || match.round || ""}
+                          </span>
+                          {match.status === "live" ? (
+                            <span className="flex items-center gap-1.5 text-xs font-mono text-red-500">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                              AO VIVO
+                            </span>
+                          ) : (
+                            <span className="text-xs font-mono text-[#A1A1AA]">{formatTime(match.scheduled_at)}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                              {match.team1?.logo_url ? (
+                                <img src={match.team1.logo_url} alt={match.team1.tag} className="w-7 h-7 object-contain" />
+                              ) : (
+                                <span className="text-[8px] font-mono text-[#A1A1AA]">
+                                  {match.team1?.tag?.substring(0, 3).toUpperCase() || "TBD"}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[#F5F5DC]">{match.team1?.name || "TBD"}</span>
+                          </div>
+                          <span className="font-mono text-lg text-[#F5F5DC]">
+                            {match.status === "live"
+                              ? `${match.team1_score} - ${match.team2_score}`
+                              : "vs"}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[#F5F5DC]">{match.team2?.name || "TBD"}</span>
+                            <div className="w-10 h-10 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                              {match.team2?.logo_url ? (
+                                <img src={match.team2.logo_url} alt={match.team2.tag} className="w-7 h-7 object-contain" />
+                              ) : (
+                                <span className="text-[8px] font-mono text-[#A1A1AA]">
+                                  {match.team2?.tag?.substring(0, 3).toUpperCase() || "TBD"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
-                  <span className="font-mono text-lg text-[#F5F5DC]">{partida.placar || "vs"}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[#F5F5DC]">{partida.time2}</span>
-                    <div className="w-10 h-10 rounded bg-[#27272A] flex items-center justify-center">
-                      <span className="text-[8px] font-mono text-[#A1A1AA]">{partida.time2.slice(0,3).toUpperCase()}</span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+                </>
+              )}
 
-          {/* Partidas Anteriores */}
-          <h2 className="font-mono text-[#A1A1AA] text-sm tracking-wider mb-4">PARTIDAS ANTERIORES</h2>
-          <div className="space-y-3">
-            {partidasAnteriores.map((partida) => (
-              <Link
-                key={partida.id}
-                href="/campeonatos/partida"
-                className="block bg-[#12121a] border border-[#27272A] rounded-lg p-4 hover:border-[#A855F7]/50 transition-colors opacity-70"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-[#A1A1AA]">{partida.fase}</span>
-                  <span className="text-xs font-mono text-[#A1A1AA]">{partida.data}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className={partida.vencedor === partida.time1 ? "text-[#22c55e]" : "text-[#A1A1AA]"}>
-                      {partida.time1}
-                    </span>
+              {/* Partidas Finalizadas */}
+              {finishedMatches.length > 0 && (
+                <>
+                  <h2 className="font-mono text-[#A1A1AA] text-sm tracking-wider mb-4">PARTIDAS ANTERIORES</h2>
+                  <div className="space-y-3">
+                    {finishedMatches.map((match) => (
+                      <Link
+                        key={match.id}
+                        href={`/campeonatos/partida/${match.id}`}
+                        className="block bg-[#12121a] border border-[#27272A] rounded-lg p-4 hover:border-[#A855F7]/50 transition-colors opacity-80"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-mono text-[#A1A1AA]">
+                            {roundLabels[match.round || ""] || match.round || ""}
+                          </span>
+                          <span className="text-xs font-mono text-[#A1A1AA]">
+                            {formatDate(match.finished_at || match.scheduled_at)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                              {match.team1?.logo_url ? (
+                                <img src={match.team1.logo_url} alt={match.team1.tag} className="w-7 h-7 object-contain" />
+                              ) : (
+                                <span className="text-[8px] font-mono text-[#A1A1AA]">
+                                  {match.team1?.tag?.substring(0, 3).toUpperCase() || "???"}
+                                </span>
+                              )}
+                            </div>
+                            <span className={match.winner_id === match.team1_id ? "text-[#22c55e] font-bold" : "text-[#A1A1AA]"}>
+                              {match.team1?.name || "TBD"}
+                            </span>
+                          </div>
+                          <span className="font-mono text-sm text-[#F5F5DC]">
+                            {match.team1_score} - {match.team2_score}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className={match.winner_id === match.team2_id ? "text-[#22c55e] font-bold" : "text-[#A1A1AA]"}>
+                              {match.team2?.name || "TBD"}
+                            </span>
+                            <div className="w-10 h-10 rounded bg-[#27272A] flex items-center justify-center overflow-hidden">
+                              {match.team2?.logo_url ? (
+                                <img src={match.team2.logo_url} alt={match.team2.tag} className="w-7 h-7 object-contain" />
+                              ) : (
+                                <span className="text-[8px] font-mono text-[#A1A1AA]">
+                                  {match.team2?.tag?.substring(0, 3).toUpperCase() || "???"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
-                  <span className="font-mono text-sm text-[#A1A1AA]">{partida.placar}</span>
-                  <div className="flex items-center gap-3">
-                    <span className={partida.vencedor === partida.time2 ? "text-[#22c55e]" : "text-[#A1A1AA]"}>
-                      {partida.time2}
-                    </span>
-                  </div>
+                </>
+              )}
+
+              {upcomingMatches.length === 0 && finishedMatches.length === 0 && (
+                <div className="flex items-center justify-center h-32">
+                  <span className="text-sm text-[#A1A1AA]">Nenhuma partida encontrada</span>
                 </div>
-              </Link>
-            ))}
-          </div>
+              )}
+            </>
+          )}
         </div>
       </main>
     </div>
