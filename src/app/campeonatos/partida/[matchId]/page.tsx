@@ -1405,11 +1405,53 @@ function PreMatchPlayerTable({
   );
 }
 
+// Helper: detectar se matchId é um UUID do Supabase
+function isUUID(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 // Página principal da partida
 export default function MatchPage() {
   const params = useParams();
   const router = useRouter();
-  const matchId = params.matchId as string;
+  const rawMatchId = params.matchId as string;
+  const [matchId, setMatchId] = useState<string>(rawMatchId);
+  const [resolving, setResolving] = useState(!isUUID(rawMatchId));
+
+  // Se matchId não é UUID (é GOTV stream ID), resolver via GOTV server
+  useEffect(() => {
+    if (isUUID(rawMatchId)) {
+      setMatchId(rawMatchId);
+      setResolving(false);
+      return;
+    }
+
+    async function resolveGOTVId() {
+      try {
+        const gotvUrl = process.env.NEXT_PUBLIC_GOTV_SERVER_URL || 'http://localhost:8080';
+        let httpUrl = gotvUrl;
+        if (gotvUrl.startsWith('wss://')) httpUrl = gotvUrl.replace('wss://', 'https://');
+        else if (gotvUrl.startsWith('ws://')) httpUrl = gotvUrl.replace('ws://', 'http://');
+
+        const res = await fetch(`${httpUrl}/api/matches`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          const found = (data.matches || []).find((m: any) => m.matchId === rawMatchId && m.dbMatchId);
+          if (found?.dbMatchId) {
+            router.replace(`/campeonatos/partida/${found.dbMatchId}`);
+            return;
+          }
+        }
+      } catch {
+        // GOTV server offline, fallback
+      }
+      // No match found - use raw ID (will show error page)
+      setMatchId(rawMatchId);
+      setResolving(false);
+    }
+
+    resolveGOTVId();
+  }, [rawMatchId, router]);
 
   // Dados do Supabase (pré-partida)
   const [dbMatch, setDbMatch] = useState<SupabaseMatchData | null>(null);
@@ -1513,9 +1555,8 @@ export default function MatchPage() {
     .filter((p) => p.team === "T")
     .sort((a, b) => b.kills - a.kills);
 
-  // Estado de carregamento inicial (Supabase + GOTV)
-  // Esperar tanto o Supabase quanto a primeira tentativa do GOTV antes de decidir qual view mostrar
-  if (dbLoading || (isConnecting && !matchState)) {
+  // Estado de carregamento inicial (resolver GOTV ID + Supabase + GOTV)
+  if (resolving || dbLoading || (isConnecting && !matchState)) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
         <div className="text-center">
