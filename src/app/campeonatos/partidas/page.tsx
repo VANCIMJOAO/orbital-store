@@ -62,6 +62,7 @@ function PartidasContent() {
 
       // Fetch DB data for matches that have dbMatchId
       const linked = liveMatches.filter((m) => m.dbMatchId);
+      const unlinked = liveMatches.filter((m) => !m.dbMatchId);
       let dbMap = new Map<string, any>();
 
       if (linked.length > 0) {
@@ -78,13 +79,34 @@ function PartidasContent() {
         dbMap = new Map((dbMatches || []).map((m: any) => [m.id, m]));
       }
 
+      // For unlinked GOTV matches, try to find a live match in the DB
+      let fallbackMatch: any = null;
+      if (unlinked.length > 0) {
+        const { data: liveDbMatches } = await supabase
+          .from("matches")
+          .select(`
+            id, round, map_name,
+            team1:teams!matches_team1_id_fkey(name, tag, logo_url),
+            team2:teams!matches_team2_id_fkey(name, tag, logo_url)
+          `)
+          .eq("status", "live")
+          .limit(1)
+          .single();
+
+        if (liveDbMatches) {
+          fallbackMatch = liveDbMatches;
+        }
+      }
+
       setEnrichedLiveMatches(
         liveMatches.map((live) => {
-          const db = live.dbMatchId ? dbMap.get(live.dbMatchId) : null;
+          const db = live.dbMatchId
+            ? dbMap.get(live.dbMatchId)
+            : fallbackMatch;
           return {
             gotvMatchId: live.matchId,
-            dbMatchId: live.dbMatchId || live.matchId,
-            mapName: live.mapName,
+            dbMatchId: live.dbMatchId || db?.id || live.matchId,
+            mapName: live.mapName || db?.map_name || "",
             scoreCT: live.scoreCT,
             scoreT: live.scoreT,
             currentRound: live.currentRound,
