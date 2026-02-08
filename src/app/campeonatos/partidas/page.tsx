@@ -55,30 +55,35 @@ function PartidasContent() {
   // Enrich GOTV live matches with real team names from Supabase
   useEffect(() => {
     async function enrichLiveMatches() {
-      const linked = liveMatches.filter((m) => m.dbMatchId);
-      if (linked.length === 0) {
+      if (liveMatches.length === 0) {
         setEnrichedLiveMatches([]);
         return;
       }
 
-      const dbIds = linked.map((m) => m.dbMatchId!);
-      const { data: dbMatches } = await supabase
-        .from("matches")
-        .select(`
-          id, round,
-          team1:teams!matches_team1_id_fkey(name, tag, logo_url),
-          team2:teams!matches_team2_id_fkey(name, tag, logo_url)
-        `)
-        .in("id", dbIds);
+      // Fetch DB data for matches that have dbMatchId
+      const linked = liveMatches.filter((m) => m.dbMatchId);
+      let dbMap = new Map<string, any>();
 
-      const dbMap = new Map((dbMatches || []).map((m: any) => [m.id, m]));
+      if (linked.length > 0) {
+        const dbIds = linked.map((m) => m.dbMatchId!);
+        const { data: dbMatches } = await supabase
+          .from("matches")
+          .select(`
+            id, round,
+            team1:teams!matches_team1_id_fkey(name, tag, logo_url),
+            team2:teams!matches_team2_id_fkey(name, tag, logo_url)
+          `)
+          .in("id", dbIds);
+
+        dbMap = new Map((dbMatches || []).map((m: any) => [m.id, m]));
+      }
 
       setEnrichedLiveMatches(
-        linked.map((live) => {
-          const db = dbMap.get(live.dbMatchId!) as any;
+        liveMatches.map((live) => {
+          const db = live.dbMatchId ? dbMap.get(live.dbMatchId) : null;
           return {
             gotvMatchId: live.matchId,
-            dbMatchId: live.dbMatchId!,
+            dbMatchId: live.dbMatchId || live.matchId,
             mapName: live.mapName,
             scoreCT: live.scoreCT,
             scoreT: live.scoreT,
