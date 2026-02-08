@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TournamentHeader } from "@/components/TournamentHeader";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -64,24 +65,7 @@ function BracketContent() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-        <div className="h-full flex items-center justify-between px-6">
-          <Link href="/campeonatos" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-              <span className="font-display text-[#A855F7] text-lg">O</span>
-            </div>
-            <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">ORBITAL ROXA</span>
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/campeonatos/visao-geral" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] tracking-wider">VISÃO GERAL</Link>
-            <Link href="/campeonatos/partidas" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] tracking-wider">PARTIDAS</Link>
-            <Link href="/campeonatos/resultados" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] tracking-wider">RESULTADOS</Link>
-            <Link href="/campeonatos/estatisticas" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] tracking-wider">ESTATÍSTICAS</Link>
-            <Link href="/campeonatos/bracket" className="font-mono text-xs text-[#A855F7] tracking-wider">BRACKET</Link>
-          </nav>
-          <div className="w-32" />
-        </div>
-      </header>
+      <TournamentHeader />
 
       <main className="flex-1 pt-16">
         <div className="max-w-7xl mx-auto px-6 py-8">

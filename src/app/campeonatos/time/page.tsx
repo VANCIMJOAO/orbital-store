@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TournamentHeader } from "@/components/TournamentHeader";
 import { useEffect, useState, useMemo } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { RequireTournamentProfile } from "@/components/RequireTournamentProfile";
@@ -51,22 +52,7 @@ function TimeListContent() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-        <div className="h-full flex items-center justify-between px-6">
-          <Link href="/campeonatos" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-              <span className="font-display text-[#A855F7] text-lg">O</span>
-            </div>
-            <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">ORBITAL ROXA</span>
-          </Link>
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <Link href="/campeonatos" className="text-[#A1A1AA] hover:text-[#F5F5DC]">CAMPEONATOS</Link>
-            <span className="text-[#A1A1AA]">/</span>
-            <span className="text-[#F5F5DC]">TIMES</span>
-          </div>
-          <div className="w-32" />
-        </div>
-      </header>
+      <TournamentHeader />
 
       <main className="flex-1 pt-16">
         <div className="max-w-4xl mx-auto px-6 py-8">

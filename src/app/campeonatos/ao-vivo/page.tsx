@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { TournamentHeader } from "@/components/TournamentHeader";
 import { useGOTVMatches, useGOTV } from "@/hooks/useGOTV";
 import type { GOTVPlayerState, KillFeedEntry } from "@/lib/gotv/types";
 
@@ -305,24 +306,8 @@ export default function AoVivoPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-        <div className="h-full flex items-center justify-between px-6">
-          <Link href="/campeonatos" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-              <span className="font-display text-[#A855F7] text-lg">O</span>
-            </div>
-            <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
-              ORBITAL ROXA
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <Link href="/campeonatos" className="text-[#A1A1AA] hover:text-[#F5F5DC]">CAMPEONATOS</Link>
-            <span className="text-[#A1A1AA]">/</span>
-            <span className="text-[#A855F7]">AO VIVO</span>
-          </div>
-
+      <TournamentHeader
+        rightContent={
           <div className="flex items-center gap-2">
             <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono ${
               serverOffline
@@ -333,8 +318,8 @@ export default function AoVivoPage() {
               {serverOffline ? "SERVIDOR OFFLINE" : "SERVIDOR ONLINE"}
             </span>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Conteúdo */}
       <main className="flex-1 pt-20 pb-8 px-6">
