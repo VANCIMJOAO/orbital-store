@@ -91,13 +91,11 @@ function PartidasContent() {
             team2:teams!matches_team2_id_fkey(name, tag, logo_url)
           `)
           .in("status", ["live", "scheduled"])
-          .order("status", { ascending: true })
           .order("scheduled_at", { ascending: true })
-          .limit(1)
-          .single();
+          .limit(1);
 
-        if (liveDb) {
-          fallbackMatch = liveDb;
+        if (liveDb && liveDb.length > 0) {
+          fallbackMatch = liveDb[0];
         }
       }
 
