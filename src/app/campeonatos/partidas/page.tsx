@@ -79,22 +79,25 @@ function PartidasContent() {
         dbMap = new Map((dbMatches || []).map((m: any) => [m.id, m]));
       }
 
-      // For unlinked GOTV matches, try to find a live match in the DB
+      // For unlinked GOTV matches, try to find a matching match in the DB
+      // Priority: status=live first, then first scheduled match (most likely the one being played)
       let fallbackMatch: any = null;
       if (unlinked.length > 0) {
-        const { data: liveDbMatches } = await supabase
+        const { data: liveDb } = await supabase
           .from("matches")
           .select(`
             id, round, map_name,
             team1:teams!matches_team1_id_fkey(name, tag, logo_url),
             team2:teams!matches_team2_id_fkey(name, tag, logo_url)
           `)
-          .eq("status", "live")
+          .in("status", ["live", "scheduled"])
+          .order("status", { ascending: true })
+          .order("scheduled_at", { ascending: true })
           .limit(1)
           .single();
 
-        if (liveDbMatches) {
-          fallbackMatch = liveDbMatches;
+        if (liveDb) {
+          fallbackMatch = liveDb;
         }
       }
 
