@@ -247,13 +247,22 @@ export default function PartidaDetalhes() {
     setVetoCurrentStep(undoneSteps.length);
   };
 
-  // Resetar veto completamente
-  const handleVetoReset = () => {
+  // Resetar veto completamente (local + banco)
+  const handleVetoReset = async () => {
     if (!confirm("Tem certeza que deseja resetar o veto?")) return;
+
+    // Limpar no banco tambem
+    const supabase = createBrowserSupabaseClient();
+    await supabase
+      .from("matches")
+      .update({ veto_data: null, map_name: null })
+      .eq("id", matchId);
+
     setVetoSteps([]);
     setVetoCurrentStep(0);
     setVetoCompleted(false);
     setVetoStarted(false);
+    fetchMatch();
   };
 
   // Salvar veto no banco e carregar no servidor

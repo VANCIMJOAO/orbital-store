@@ -151,7 +151,7 @@ function PartidasContent() {
         if (matchesData) {
           const all = matchesData as unknown as MatchWithTeams[];
           setUpcomingMatches(all.filter((m) => m.status === "scheduled" || m.status === "live" || m.status === "pending"));
-          setFinishedMatches(all.filter((m) => m.status === "finished").reverse());
+          setFinishedMatches(all.filter((m) => m.status === "finished" || m.status === "cancelled").reverse());
         }
       } catch {
         // fetch error
@@ -288,12 +288,16 @@ function PartidasContent() {
             </div>
           ) : (
             <>
-              {/* Próximas Partidas */}
-              {upcomingMatches.length > 0 && (
+              {/* Próximas Partidas (excluir as que já estão no GOTV ao vivo) */}
+              {upcomingMatches.length > 0 && (() => {
+                const gotvMatchIds = new Set(enrichedLiveMatches.map(m => m.dbMatchId));
+                const filtered = upcomingMatches.filter(m => !gotvMatchIds.has(m.id));
+                if (filtered.length === 0) return null;
+                return (
                 <>
                   <h2 className="font-mono text-[#A855F7] text-sm tracking-wider mb-4">PRÓXIMAS PARTIDAS</h2>
                   <div className="space-y-3 mb-8">
-                    {upcomingMatches.map((match) => (
+                    {filtered.map((match) => (
                       <Link
                         key={match.id}
                         href={`/campeonatos/partida/${match.id}`}
@@ -349,7 +353,8 @@ function PartidasContent() {
                     ))}
                   </div>
                 </>
-              )}
+                );
+              })()}
 
               {/* Partidas Finalizadas */}
               {finishedMatches.length > 0 && (
