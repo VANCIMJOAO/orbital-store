@@ -58,6 +58,51 @@ interface PlayerTeam {
   logo_url: string | null;
 }
 
+interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
+  tier: "bronze" | "silver" | "gold" | "purple";
+}
+
+function computeAchievements(
+  stats: PlayerStats | null,
+  matchHistory: MatchHistoryEntry[],
+  team: PlayerTeam | null,
+): Achievement[] {
+  const s = stats;
+  return [
+    // Partidas jogadas
+    { id: "first_match", name: "Primeira Partida", description: "Jogue sua primeira partida", icon: "1", unlocked: (s?.matches || 0) >= 1, tier: "bronze" },
+    { id: "veteran_5", name: "Veterano", description: "Jogue 5 partidas", icon: "5", unlocked: (s?.matches || 0) >= 5, tier: "silver" },
+    { id: "veteran_10", name: "Experiente", description: "Jogue 10 partidas", icon: "10", unlocked: (s?.matches || 0) >= 10, tier: "gold" },
+    // Vitórias
+    { id: "first_win", name: "Primeira Vitória", description: "Vença sua primeira partida", icon: "W", unlocked: (s?.wins || 0) >= 1, tier: "bronze" },
+    { id: "five_wins", name: "Dominante", description: "Vença 5 partidas", icon: "5W", unlocked: (s?.wins || 0) >= 5, tier: "gold" },
+    // K/D
+    { id: "positive_kd", name: "Positivo", description: "Tenha K/D acima de 1.0", icon: "K", unlocked: parseFloat(s?.kd || "0") >= 1.0 && (s?.matches || 0) > 0, tier: "silver" },
+    { id: "kd_master", name: "Mestre do K/D", description: "Tenha K/D acima de 1.5", icon: "K+", unlocked: parseFloat(s?.kd || "0") >= 1.5 && (s?.matches || 0) > 0, tier: "gold" },
+    // Kills
+    { id: "kills_50", name: "Atirador", description: "Faça 50 kills no total", icon: "50", unlocked: (s?.kills || 0) >= 50, tier: "bronze" },
+    { id: "kills_200", name: "Exterminador", description: "Faça 200 kills no total", icon: "200", unlocked: (s?.kills || 0) >= 200, tier: "gold" },
+    // Headshots
+    { id: "headhunter", name: "Caçador de Cabeças", description: "HS% acima de 50%", icon: "HS", unlocked: parseFloat(s?.hsPercentage || "0") >= 50 && (s?.kills || 0) > 0, tier: "silver" },
+    // Multi-kills
+    { id: "first_ace", name: "Ace!", description: "Faça um ace (5K em um round)", icon: "A", unlocked: (s?.aces || 0) >= 1, tier: "purple" },
+    { id: "quad_kill", name: "Quadra Kill", description: "Faça um 4K em um round", icon: "4K", unlocked: (s?.fourKills || 0) >= 1, tier: "gold" },
+    // Clutch
+    { id: "clutch_master", name: "Clutch Master", description: "Vença um clutch", icon: "C", unlocked: (s?.clutchWins || 0) >= 1, tier: "purple" },
+    // Rating
+    { id: "star_player", name: "Estrela", description: "Rating médio acima de 1.2", icon: "R", unlocked: parseFloat(s?.avgRating || "0") >= 1.2 && (s?.matches || 0) > 0, tier: "gold" },
+    // Time
+    { id: "team_player", name: "Jogador de Time", description: "Faça parte de um time", icon: "T", unlocked: team !== null, tier: "bronze" },
+    // First kills
+    { id: "entry_fragger", name: "Entry Fragger", description: "Faça 10 first kills", icon: "FK", unlocked: (s?.firstKills || 0) >= 10, tier: "silver" },
+  ];
+}
+
 function PerfilContent() {
   const { profile, updateProfile, refreshProfile, signOut } = useAuth();
   const { addToast } = useToast();
@@ -70,6 +115,9 @@ function PerfilContent() {
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [matchHistory, setMatchHistory] = useState<MatchHistoryEntry[]>([]);
   const [team, setTeam] = useState<PlayerTeam | null>(null);
+
+  // Conquistas calculadas a partir dos stats
+  const achievements = computeAchievements(stats, matchHistory, team);
 
   // Buscar stats reais da API
   useEffect(() => {
@@ -493,6 +541,47 @@ function PerfilContent() {
                 </div>
               )}
             </div>
+
+            {/* Conquistas */}
+            {!statsLoading && (
+              <div className="bg-[#12121a] border border-[#27272A] rounded-lg">
+                <div className="p-4 border-b border-[#27272A] flex items-center justify-between">
+                  <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">CONQUISTAS</h3>
+                  <span className="text-xs font-mono text-[#A855F7]">
+                    {achievements.filter(a => a.unlocked).length}/{achievements.length}
+                  </span>
+                </div>
+                <div className="p-3 grid grid-cols-4 gap-2">
+                  {achievements.map((ach) => {
+                    const tierColors = {
+                      bronze: ach.unlocked ? "border-[#CD7F32]/60 bg-[#CD7F32]/10 text-[#CD7F32]" : "border-[#27272A] bg-[#0A0A0A] text-[#52525B]",
+                      silver: ach.unlocked ? "border-[#C0C0C0]/60 bg-[#C0C0C0]/10 text-[#C0C0C0]" : "border-[#27272A] bg-[#0A0A0A] text-[#52525B]",
+                      gold: ach.unlocked ? "border-[#FFD700]/60 bg-[#FFD700]/10 text-[#FFD700]" : "border-[#27272A] bg-[#0A0A0A] text-[#52525B]",
+                      purple: ach.unlocked ? "border-[#A855F7]/60 bg-[#A855F7]/10 text-[#A855F7]" : "border-[#27272A] bg-[#0A0A0A] text-[#52525B]",
+                    };
+                    return (
+                      <div
+                        key={ach.id}
+                        className={`relative group rounded-lg border p-2 flex flex-col items-center justify-center aspect-square transition-all ${tierColors[ach.tier]} ${ach.unlocked ? "" : "opacity-40"}`}
+                        title={`${ach.name}: ${ach.description}`}
+                      >
+                        <span className="font-mono text-xs font-bold">{ach.icon}</span>
+                        <span className="text-[7px] font-mono mt-1 text-center leading-tight truncate w-full">
+                          {ach.name}
+                        </span>
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
+                          <div className="bg-[#1a1a2e] border border-[#27272A] rounded-lg p-2 shadow-lg whitespace-nowrap">
+                            <span className="text-[10px] text-[#F5F5DC] block font-mono font-bold">{ach.name}</span>
+                            <span className="text-[9px] text-[#A1A1AA] block">{ach.description}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Multi-kills */}
             {stats && (stats.aces > 0 || stats.fourKills > 0 || stats.threeKills > 0) && (
