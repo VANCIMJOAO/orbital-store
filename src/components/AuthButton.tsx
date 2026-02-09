@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AuthButton() {
   const { user, loading, signInWithDiscord, signOut } = useAuth();
+  const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -13,8 +15,8 @@ export default function AuthButton() {
     try {
       setIsLoading(true);
       await signInWithDiscord();
-    } catch (error) {
-      console.error("Failed to sign in:", error);
+    } catch {
+      // Silenced
     } finally {
       setIsLoading(false);
     }
@@ -25,8 +27,8 @@ export default function AuthButton() {
       setIsLoading(true);
       await signOut();
       setIsMenuOpen(false);
-    } catch (error) {
-      console.error("Failed to sign out:", error);
+    } catch {
+      // Silenced
     } finally {
       setIsLoading(false);
     }
@@ -140,7 +142,7 @@ export default function AuthButton() {
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
-                  // Navigate to orders - will implement later
+                  router.push("/pedidos");
                 }}
                 className="w-full px-4 py-2 text-left font-mono text-sm text-[#A1A1AA] hover:bg-[#A855F7]/10 hover:text-[#F5F5DC] transition-colors"
               >

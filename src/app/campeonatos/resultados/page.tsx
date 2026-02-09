@@ -64,8 +64,8 @@ function ResultadosContent() {
         if (matchesData) {
           setMatches(matchesData as unknown as MatchWithTeams[]);
         }
-      } catch (error) {
-        console.error("Error fetching results:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

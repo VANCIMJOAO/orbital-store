@@ -198,7 +198,6 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[GOTV Hook] Connected to match:', matchId);
         setIsConnected(true);
         isConnectedRef.current = true;
         setIsConnecting(false);
@@ -219,7 +218,6 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
         wsRef.current = null;
 
         if (wasConnected) {
-          console.log('[GOTV Hook] Disconnected from match:', matchId);
           failCountRef.current = 0;
         } else {
           failCountRef.current++;
@@ -293,25 +291,20 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
               break;
 
             case 'phase_change':
-              // Mudança de fase da partida
-              console.log('[GOTV Hook] Phase changed:', message.data);
               break;
 
             case 'side_swap':
-              // Troca de lado (halftime/overtime)
-              console.log('[GOTV Hook] Sides swapped:', message.data);
               break;
 
             case 'disconnected':
               setMatchState(prev => prev ? { ...prev, status: 'ended' } : null);
               break;
           }
-        } catch (err) {
-          console.error('[GOTV Hook] Failed to parse message:', err);
+        } catch {
+          // Parse error silenciado
         }
       };
-    } catch (err) {
-      console.error('[GOTV Hook] Failed to connect:', err);
+    } catch {
       setError('Falha ao conectar ao servidor GOTV');
       setIsConnecting(false);
     }
@@ -411,7 +404,6 @@ export function useGOTVMatches(serverUrl?: string) {
         setMatches([]);
         setError(null);
       } else {
-        console.error('[GOTV Hook] Failed to fetch matches:', err);
         setError('Falha ao buscar partidas');
       }
     } finally {
@@ -473,8 +465,7 @@ export function useGOTVMatchState(matchId: string, serverUrl?: string) {
       const data = await response.json();
       setMatchState(data);
       setError(null);
-    } catch (err) {
-      console.error('[GOTV Hook] Failed to fetch match state:', err);
+    } catch {
       setError('Falha ao buscar estado da partida');
     } finally {
       setIsLoading(false);

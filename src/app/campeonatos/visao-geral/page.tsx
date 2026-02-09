@@ -134,8 +134,8 @@ function VisaoGeralContent() {
           );
           setUpcomingMatches(upcoming);
         }
-      } catch (error) {
-        console.error("Error fetching overview:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

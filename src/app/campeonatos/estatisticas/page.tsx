@@ -264,8 +264,8 @@ function EstatisticasContent() {
 
           setMapStats(maps);
         }
-      } catch (error) {
-        console.error("Error fetching stats:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

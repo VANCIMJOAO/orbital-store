@@ -40,8 +40,8 @@ function TimeListContent() {
             .filter(Boolean);
           setTeams(teamsArray);
         }
-      } catch (error) {
-        console.error("Error fetching teams:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

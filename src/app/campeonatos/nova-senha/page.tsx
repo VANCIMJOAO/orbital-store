@@ -32,8 +32,7 @@ export default function NovaSenhaPage() {
 
   const getPasswordStrength = () => {
     if (password.length === 0) return { level: 0, text: "", color: "" };
-    if (password.length < 6) return { level: 1, text: "Muito fraca", color: "bg-red-500" };
-    if (password.length < 8) return { level: 2, text: "Fraca", color: "bg-orange-500" };
+    if (password.length < 8) return { level: 1, text: "Muito fraca", color: "bg-red-500" };
     if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
       return { level: 3, text: "Media", color: "bg-yellow-500" };
     }
@@ -53,8 +52,8 @@ export default function NovaSenhaPage() {
       return;
     }
 
-    if (password.length < 6) {
-      addToast("A senha deve ter no minimo 6 caracteres", "error");
+    if (password.length < 8) {
+      addToast("A senha deve ter no minimo 8 caracteres", "error");
       return;
     }
 
@@ -235,7 +234,7 @@ export default function NovaSenhaPage() {
 
                     <button
                       type="submit"
-                      disabled={loading || password !== confirmPassword || password.length < 6}
+                      disabled={loading || password !== confirmPassword || password.length < 8}
                       className="relative w-full group"
                     >
                       <div className="absolute -inset-0.5 bg-gradient-to-r from-[#A855F7] to-[#7C3AED] rounded-xl blur opacity-60 group-hover:opacity-100 transition-opacity" />

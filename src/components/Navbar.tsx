@@ -38,11 +38,9 @@ export default function Navbar() {
 
       if (data.url) {
         window.location.href = data.url;
-      } else {
-        console.error("Checkout error:", data.error);
       }
-    } catch (error) {
-      console.error("Checkout error:", error);
+    } catch {
+      // Checkout failed silently
     } finally {
       setIsCheckingOut(false);
     }

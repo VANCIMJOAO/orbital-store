@@ -295,8 +295,8 @@ export default function CampeonatosPage() {
             }
           }
         }
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

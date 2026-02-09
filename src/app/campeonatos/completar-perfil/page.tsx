@@ -78,7 +78,6 @@ export default function CompletarPerfilPage() {
       const { error } = await updateProfile(updateData);
 
       if (error) {
-        console.error("Erro ao atualizar perfil:", error);
         addToast("Erro ao atualizar perfil. Tente novamente.", "error");
         setLoading(false);
         return;
@@ -89,8 +88,7 @@ export default function CompletarPerfilPage() {
 
       // Usar window.location para garantir reload completo do estado
       window.location.href = "/campeonatos";
-    } catch (err) {
-      console.error("Erro inesperado:", err);
+    } catch {
       addToast("Erro ao atualizar perfil. Tente novamente.", "error");
       setLoading(false);
     }

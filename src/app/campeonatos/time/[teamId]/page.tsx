@@ -275,8 +275,8 @@ function TimeContent() {
             setRanking(idx >= 0 ? idx + 1 : 0);
           }
         }
-      } catch (error) {
-        console.error("Error fetching team data:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

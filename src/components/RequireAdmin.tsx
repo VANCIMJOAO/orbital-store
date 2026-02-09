@@ -12,16 +12,6 @@ export function RequireAdmin({ children }: RequireAdminProps) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
 
-  // Debug
-  console.log("[RequireAdmin] State:", {
-    loading,
-    hasUser: !!user,
-    userId: user?.id,
-    hasProfile: !!profile,
-    profileId: profile?.id,
-    isAdmin: profile?.is_admin
-  });
-
   useEffect(() => {
     if (loading) return;
 

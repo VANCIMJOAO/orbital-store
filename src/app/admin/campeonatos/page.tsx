@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -29,6 +29,9 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
 export default function CampeonatosAdmin() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [teamCounts, setTeamCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const fetchTournaments = async () => {
@@ -40,6 +43,19 @@ export default function CampeonatosAdmin() {
 
       if (!error && data) {
         setTournaments(data);
+
+        // Fetch team counts for each tournament
+        const { data: teamData } = await supabase
+          .from("tournament_teams")
+          .select("tournament_id");
+
+        if (teamData) {
+          const counts: Record<string, number> = {};
+          teamData.forEach((tt: { tournament_id: string }) => {
+            counts[tt.tournament_id] = (counts[tt.tournament_id] || 0) + 1;
+          });
+          setTeamCounts(counts);
+        }
       }
       setLoading(false);
     };
@@ -73,12 +89,29 @@ export default function CampeonatosAdmin() {
     const { error } = await supabase.from("tournaments").delete().eq("id", tournament.id);
 
     if (error) {
-      console.error("Erro ao excluir:", error);
+      alert("Erro ao excluir campeonato: " + error.message);
       return;
     }
 
     setTournaments((prev) => prev.filter((t) => t.id !== tournament.id));
   };
+
+  const filteredTournaments = useMemo(() => {
+    let result = tournaments;
+    if (statusFilter) {
+      result = result.filter((t) => (t.status || "draft") === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.game?.toLowerCase().includes(q) ||
+          t.slug?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [tournaments, search, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -109,11 +142,17 @@ export default function CampeonatosAdmin() {
           <input
             type="text"
             placeholder="Buscar campeonato..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-[#12121a] border border-[#27272A] rounded-lg pl-10 pr-4 py-2 text-sm text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50"
           />
         </div>
 
-        <select className="bg-[#12121a] border border-[#27272A] rounded-lg px-4 py-2 text-sm text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="bg-[#12121a] border border-[#27272A] rounded-lg px-4 py-2 text-sm text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50"
+        >
           <option value="">Todos os status</option>
           <option value="draft">Rascunho</option>
           <option value="registration">Inscricoes</option>
@@ -159,7 +198,7 @@ export default function CampeonatosAdmin() {
                   </td>
                 </tr>
               ))
-            ) : tournaments.length === 0 ? (
+            ) : filteredTournaments.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-6 py-12 text-center">
                   <div className="flex flex-col items-center gap-4">
@@ -179,7 +218,7 @@ export default function CampeonatosAdmin() {
                 </td>
               </tr>
             ) : (
-              tournaments.map((tournament) => {
+              filteredTournaments.map((tournament) => {
                 const status = statusColors[tournament.status || "draft"] || statusColors.draft;
                 return (
                   <tr
@@ -208,7 +247,7 @@ export default function CampeonatosAdmin() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-mono text-xs text-[#A1A1AA]">
-                        0/{tournament.max_teams ?? "-"}
+                        {teamCounts[tournament.id] || 0}/{tournament.max_teams ?? "-"}
                       </span>
                     </td>
                     <td className="px-6 py-4">

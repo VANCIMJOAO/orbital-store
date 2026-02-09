@@ -85,6 +85,16 @@ export default function CampeonatoDetalhes() {
   const [viewMode, setViewMode] = useState<"list" | "bracket">("bracket");
   const [deleting, setDeleting] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    start_date: "",
+    end_date: "",
+    prize_pool: "",
+    status: "draft",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -340,9 +350,7 @@ export default function CampeonatoDetalhes() {
       .insert(matchesToCreate)
       .select("id, round, status");
 
-    if (error) {
-      console.error("Erro ao gerar bracket:", error);
-    } else {
+    if (!error) {
       // Atualizar status do campeonato
       await supabase
         .from("tournaments")
@@ -354,9 +362,8 @@ export default function CampeonatoDetalhes() {
       if (firstMatch) {
         try {
           await fetch(`/api/matches/${firstMatch.id}/load-server`, { method: "POST" });
-          console.log("[Bracket] Primeira partida carregada automaticamente no servidor");
-        } catch (e) {
-          console.error("[Bracket] Falha ao auto-carregar primeira partida:", e);
+        } catch {
+          // load server error
         }
       }
     }
@@ -409,12 +416,59 @@ export default function CampeonatoDetalhes() {
     const { error } = await supabase.from("tournaments").delete().eq("id", tournamentId);
 
     if (error) {
-      console.error("Erro ao excluir campeonato:", error);
       setDeleting(false);
       return;
     }
 
     router.push("/admin/campeonatos");
+  };
+
+  const openEditModal = () => {
+    if (!tournament) return;
+    setEditForm({
+      name: tournament.name,
+      description: tournament.description || "",
+      start_date: tournament.start_date ? tournament.start_date.slice(0, 16) : "",
+      end_date: tournament.end_date ? tournament.end_date.slice(0, 16) : "",
+      prize_pool: tournament.prize_pool != null ? String(tournament.prize_pool) : "",
+      status: tournament.status || "draft",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditTournament = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tournament) return;
+    setSavingEdit(true);
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase
+      .from("tournaments")
+      .update({
+        name: editForm.name,
+        description: editForm.description || null,
+        start_date: editForm.start_date || null,
+        end_date: editForm.end_date || null,
+        prize_pool: editForm.prize_pool ? Number(editForm.prize_pool) : null,
+        status: editForm.status,
+      })
+      .eq("id", tournament.id);
+
+    if (error) {
+      alert("Erro ao atualizar campeonato: " + error.message);
+    } else {
+      setTournament({
+        ...tournament,
+        name: editForm.name,
+        description: editForm.description || null,
+        start_date: editForm.start_date || null,
+        end_date: editForm.end_date || null,
+        prize_pool: editForm.prize_pool ? Number(editForm.prize_pool) : null,
+        status: editForm.status,
+      });
+      setShowEditModal(false);
+    }
+    setSavingEdit(false);
   };
 
   const formatDate = (dateString: string | null) => {
@@ -492,6 +546,16 @@ export default function CampeonatoDetalhes() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={openEditModal}
+            className="flex items-center gap-2 px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#F5F5DC] font-mono text-xs rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            EDITAR
+          </button>
+
           {canGenerateBracket && (
             <button
               onClick={handleGenerateBracket}
@@ -737,6 +801,103 @@ export default function CampeonatoDetalhes() {
           </div>
           </div>
           )}
+        </div>
+      )}
+
+      {/* Modal Editar Campeonato */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] border border-[#27272A] rounded-2xl p-6 w-full max-w-lg">
+            <h2 className="font-display text-xl text-[#F5F5DC] mb-6">Editar Campeonato</h2>
+
+            <form onSubmit={handleEditTournament} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-[#A1A1AA] mb-2">NOME *</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                  className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-[#A1A1AA] mb-2">DESCRIÇÃO</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono text-[#A1A1AA] mb-2">DATA INÍCIO</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.start_date}
+                    onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                    className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-[#A1A1AA] mb-2">DATA FIM</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.end_date}
+                    onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
+                    className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono text-[#A1A1AA] mb-2">PREMIAÇÃO (R$)</label>
+                  <input
+                    type="number"
+                    value={editForm.prize_pool}
+                    onChange={(e) => setEditForm({ ...editForm, prize_pool: e.target.value })}
+                    placeholder="0"
+                    min="0"
+                    className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-[#A1A1AA] mb-2">STATUS</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50"
+                  >
+                    <option value="draft">Rascunho</option>
+                    <option value="registration">Inscrições</option>
+                    <option value="ongoing">Em Andamento</option>
+                    <option value="finished">Finalizado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-4 py-3 bg-[#27272A] hover:bg-[#3f3f46] text-[#F5F5DC] font-mono text-xs rounded-lg transition-colors"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit || !editForm.name}
+                  className="flex-1 px-4 py-3 bg-[#A855F7] hover:bg-[#9333EA] disabled:bg-[#A855F7]/50 text-white font-mono text-xs rounded-lg transition-colors"
+                >
+                  {savingEdit ? "SALVANDO..." : "SALVAR"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/admin-auth";
 
 // Criar cliente Supabase com service role para bypass RLS
 const supabase = createClient(
@@ -32,11 +33,14 @@ export async function GET(
   return NextResponse.json(match);
 }
 
-// PATCH - Atualizar partida (placar, status, etc)
+// PATCH - Atualizar partida (placar, status, etc) — admin only
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
   const { id: matchId } = await params;
   const body = await request.json();
 

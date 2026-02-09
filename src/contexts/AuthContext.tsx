@@ -53,12 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Buscar sessão inicial
     const getInitialSession = async () => {
-      console.log("[AuthContext] Getting initial session...");
       const { data: { session } } = await supabase.auth.getSession();
-      console.log("[AuthContext] Initial session:", session?.user?.id);
 
       if (isInitialized) {
-        console.log("[AuthContext] Already initialized, skipping");
         return;
       }
       isInitialized = true;
@@ -81,17 +78,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Escutar mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("[AuthContext] Auth state change:", event, session?.user?.id);
-
         // Ignorar INITIAL_SESSION se já inicializamos
         if (event === "INITIAL_SESSION" && isInitialized) {
-          console.log("[AuthContext] Ignoring INITIAL_SESSION, already initialized");
           return;
         }
 
         // Logout
         if (event === "SIGNED_OUT" || !session?.user) {
-          console.log("[AuthContext] Signed out");
           currentUserId = null;
           setProfile(null);
           setUser(null);
@@ -102,7 +95,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Se é o mesmo usuário e já estamos buscando/temos perfil, não precisa recarregar
         if (session.user.id === currentUserId && isFetchingProfile) {
-          console.log("[AuthContext] Already fetching profile for this user");
           return;
         }
 
@@ -112,7 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session.user);
 
-        console.log("[AuthContext] Fetching profile for user:", session.user.id);
         isFetchingProfile = true;
         await fetchProfile(session.user.id);
         isFetchingProfile = false;
@@ -126,7 +117,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   const fetchProfile = async (userId: string) => {
-    console.log("[AuthContext] Fetching profile for:", userId);
     setProfileLoading(true);
     try {
       // Usar fetch direto para evitar qualquer cache do cliente Supabase
@@ -141,19 +131,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       const data = await response.json();
-      console.log("[AuthContext] Profile result:", data);
 
       if (!response.ok || !data || data.length === 0) {
-        console.error("Erro ao buscar perfil:", data);
         setProfile(null);
         return;
       }
 
       const profileData = data[0] as UserProfile;
-      console.log("[AuthContext] Setting profile, is_admin:", profileData.is_admin);
       setProfile(profileData);
-    } catch (err) {
-      console.error("Erro inesperado ao buscar perfil:", err);
+    } catch {
       setProfile(null);
     } finally {
       setProfileLoading(false);

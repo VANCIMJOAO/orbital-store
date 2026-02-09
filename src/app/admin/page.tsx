@@ -103,8 +103,8 @@ export default function AdminDashboard() {
 
   const quickActions = [
     { label: "Novo Campeonato", href: "/admin/campeonatos/novo", icon: "+" },
-    { label: "Novo Time", href: "/admin/times/novo", icon: "+" },
-    { label: "Nova Partida", href: "/admin/partidas/nova", icon: "+" },
+    { label: "Novo Time", href: "/admin/times", icon: "+" },
+    { label: "Ver Partidas", href: "/admin/partidas", icon: "+" },
   ];
 
   return (

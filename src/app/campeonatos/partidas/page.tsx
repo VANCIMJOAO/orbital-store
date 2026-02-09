@@ -153,8 +153,8 @@ function PartidasContent() {
           setUpcomingMatches(all.filter((m) => m.status === "scheduled" || m.status === "live" || m.status === "pending"));
           setFinishedMatches(all.filter((m) => m.status === "finished").reverse());
         }
-      } catch (error) {
-        console.error("Error fetching matches:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

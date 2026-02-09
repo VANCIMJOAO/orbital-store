@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import {
   validateUsername,
   validateSteamId,
@@ -24,6 +25,7 @@ export default function CadastroPage() {
 
   const { signUp } = useAuth();
   const { addToast } = useToast();
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   // Validação de senha em tempo real
   const passwordValidation = validatePassword(password);
@@ -67,6 +69,19 @@ export default function CadastroPage() {
 
     // Sanitizar inputs antes de enviar
     const sanitizedUsername = sanitizeUsername(username);
+
+    // Verificar se username já existe
+    const { data: existingUser } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", sanitizedUsername)
+      .maybeSingle();
+
+    if (existingUser) {
+      addToast("Este nome de usuario ja esta em uso", "error");
+      setLoading(false);
+      return;
+    }
     const sanitizedSteamId = sanitizeSteamId(steamId);
 
     const { error } = await signUp(email.trim().toLowerCase(), password, {

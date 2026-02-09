@@ -53,8 +53,8 @@ function BracketContent() {
         if (matchesData) {
           setMatches(matchesData as unknown as MatchWithTeams[]);
         }
-      } catch (error) {
-        console.error("Error fetching bracket data:", error);
+      } catch {
+        // fetch error
       } finally {
         setLoading(false);
       }

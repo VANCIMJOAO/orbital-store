@@ -132,8 +132,8 @@ function PerfilContent() {
           setMatchHistory(data.matchHistory || []);
           setTeam(data.team || null);
         }
-      } catch (err) {
-        console.error("Erro ao buscar stats:", err);
+      } catch {
+        // fetch error
       } finally {
         setStatsLoading(false);
       }
