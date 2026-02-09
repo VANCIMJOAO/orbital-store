@@ -1764,22 +1764,41 @@ export default function MatchPage() {
               )}
             </div>
 
-            {/* Tabelas de jogadores */}
-            <div className="space-y-4">
-              <PreMatchPlayerTable
-                teamPlayers={team1Players}
-                teamName={dbMatch.team1?.name || 'Time 1'}
-                teamLogo={dbMatch.team1?.logo_url || null}
-                teamSide="CT"
-                onlineSteamIds={onlineSteamIds}
-              />
-              <PreMatchPlayerTable
-                teamPlayers={team2Players}
-                teamName={dbMatch.team2?.name || 'Time 2'}
-                teamLogo={dbMatch.team2?.logo_url || null}
-                teamSide="T"
-                onlineSteamIds={onlineSteamIds}
-              />
+            {/* Maps + Jogadores + Watch */}
+            <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_260px] gap-4">
+              {/* Coluna esquerda: Maps */}
+              <div>
+                <MapsSection
+                  team1Name={dbMatch.team1?.name || "Time 1"}
+                  team2Name={dbMatch.team2?.name || "Time 2"}
+                  currentMap={dbMatch.map_name || ""}
+                  vetoData={dbMatch.veto_data || null}
+                  bestOf={dbMatch.best_of || 1}
+                />
+              </div>
+
+              {/* Coluna central: Jogadores */}
+              <div className="space-y-4">
+                <PreMatchPlayerTable
+                  teamPlayers={team1Players}
+                  teamName={dbMatch.team1?.name || 'Time 1'}
+                  teamLogo={dbMatch.team1?.logo_url || null}
+                  teamSide="CT"
+                  onlineSteamIds={onlineSteamIds}
+                />
+                <PreMatchPlayerTable
+                  teamPlayers={team2Players}
+                  teamName={dbMatch.team2?.name || 'Time 2'}
+                  teamLogo={dbMatch.team2?.logo_url || null}
+                  teamSide="T"
+                  onlineSteamIds={onlineSteamIds}
+                />
+              </div>
+
+              {/* Coluna direita: Watch */}
+              <div>
+                <WatchSection streamUrl={dbMatch.stream_url || null} />
+              </div>
             </div>
 
           </div>
