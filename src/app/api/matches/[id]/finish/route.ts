@@ -172,10 +172,9 @@ async function checkAndActivateMatch(tournamentId: string, round: string) {
       .update({ status: "scheduled" })
       .eq("id", match.id);
 
-    log.info(`Activated match ${match.id} (${round})`);
-
-    // Auto-carregar partida no servidor CS2 via Pterodactyl
-    await autoLoadMatchOnServer(match.id);
+    log.info(`Activated match ${match.id} (${round}) - aguardando veto do admin`);
+    // Partida fica "scheduled" aguardando admin fazer o veto de mapas
+    // O load no servidor acontece após o veto ser concluído
   }
 }
 

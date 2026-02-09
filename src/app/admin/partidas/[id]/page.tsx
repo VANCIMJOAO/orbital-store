@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import {
+  CS2_MAP_POOL,
+  MAP_DISPLAY_NAMES,
+  VETO_SEQUENCE_BO1,
+  VETO_SEQUENCE_BO3,
+  type VetoStep,
+  type VetoData,
+  type VetoSequenceStep,
+} from "@/lib/constants";
 
 interface Team {
   id: string;
@@ -35,6 +44,8 @@ interface Match {
   is_live: boolean | null;
   best_of: number;
   map_name: string | null;
+  veto_data: VetoData | null;
+  stream_url: string | null;
   team1?: Team | null;
   team2?: Team | null;
   tournament?: Tournament;
@@ -65,6 +76,17 @@ const roundNames: Record<string, string> = {
   grand_final: "GRAND FINAL",
 };
 
+// Imagens de mapas para o veto visual
+const mapImages: Record<string, string> = {
+  de_mirage: "/maps/mirage.jpg",
+  de_inferno: "/maps/inferno.jpg",
+  de_ancient: "/maps/ancient.jpg",
+  de_nuke: "/maps/nuke.jpg",
+  de_anubis: "/maps/anubis.jpg",
+  de_vertigo: "/maps/vertigo.jpg",
+  de_dust2: "/maps/dust2.jpg",
+};
+
 export default function PartidaDetalhes() {
   const params = useParams();
   const router = useRouter();
@@ -77,11 +99,19 @@ export default function PartidaDetalhes() {
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [finishScores, setFinishScores] = useState({ team1: 0, team2: 0 });
 
-  useEffect(() => {
-    fetchMatch();
-  }, [matchId]);
+  // Veto state
+  const [vetoFirstTeam, setVetoFirstTeam] = useState<"team1" | "team2">("team1");
+  const [vetoStarted, setVetoStarted] = useState(false);
+  const [vetoSteps, setVetoSteps] = useState<VetoStep[]>([]);
+  const [vetoCurrentStep, setVetoCurrentStep] = useState(0);
+  const [vetoCompleted, setVetoCompleted] = useState(false);
+  const [vetoSaving, setVetoSaving] = useState(false);
 
-  const fetchMatch = async () => {
+  // Stream URL state
+  const [streamUrl, setStreamUrl] = useState("");
+  const [savingStream, setSavingStream] = useState(false);
+
+  const fetchMatch = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase
       .from("matches")
@@ -95,9 +125,204 @@ export default function PartidaDetalhes() {
       .single();
 
     if (!error && data) {
-      setMatch(data);
+      setMatch(data as unknown as Match);
+      if (data.stream_url) setStreamUrl(data.stream_url as string);
+      if (data.veto_data) {
+        const vd = data.veto_data as unknown as VetoData;
+        setVetoSteps(vd.steps);
+        setVetoFirstTeam(vd.first_team);
+        setVetoStarted(true);
+        setVetoCompleted(vd.completed);
+        setVetoCurrentStep(vd.steps.length);
+      }
     }
     setLoading(false);
+  }, [matchId]);
+
+  useEffect(() => {
+    fetchMatch();
+  }, [fetchMatch]);
+
+  // Determinar sequencia de veto baseado no best_of
+  const getVetoSequence = (): VetoSequenceStep[] => {
+    if (!match) return VETO_SEQUENCE_BO1;
+    return match.best_of >= 3 ? VETO_SEQUENCE_BO3 : VETO_SEQUENCE_BO1;
+  };
+
+  // Mapas ainda disponiveis no veto
+  const getAvailableMaps = (): string[] => {
+    const usedMaps = vetoSteps.map((s) => s.map);
+    return CS2_MAP_POOL.filter((m) => !usedMaps.includes(m));
+  };
+
+  // Determinar quem faz a ação atual
+  const getCurrentActor = (): "team1" | "team2" => {
+    const sequence = getVetoSequence();
+    if (vetoCurrentStep >= sequence.length) return "team1";
+    const step = sequence[vetoCurrentStep];
+    if (step.actor === "first") return vetoFirstTeam;
+    return vetoFirstTeam === "team1" ? "team2" : "team1";
+  };
+
+  // Ação atual (ban ou pick)
+  const getCurrentAction = (): "ban" | "pick" => {
+    const sequence = getVetoSequence();
+    if (vetoCurrentStep >= sequence.length) return "ban";
+    return sequence[vetoCurrentStep].action as "ban" | "pick";
+  };
+
+  // Clicar em um mapa durante o veto
+  const handleMapClick = (map: string) => {
+    if (vetoCompleted) return;
+    const sequence = getVetoSequence();
+    if (vetoCurrentStep >= sequence.length) return;
+
+    const actor = getCurrentActor();
+    const action = getCurrentAction();
+
+    const newStep: VetoStep = {
+      team: actor,
+      action: action,
+      map: map,
+      order: vetoCurrentStep + 1,
+    };
+
+    const updatedSteps = [...vetoSteps, newStep];
+    setVetoSteps(updatedSteps);
+    const nextStep = vetoCurrentStep + 1;
+    setVetoCurrentStep(nextStep);
+
+    // Verificar se acabou a sequência e precisa definir o leftover
+    if (nextStep >= sequence.length) {
+      const usedMaps = updatedSteps.map((s) => s.map);
+      const remaining = CS2_MAP_POOL.filter((m) => !usedMaps.includes(m));
+
+      if (remaining.length === 1) {
+        const leftoverStep: VetoStep = {
+          team: "-",
+          action: "leftover",
+          map: remaining[0],
+          order: nextStep + 1,
+        };
+        const finalSteps = [...updatedSteps, leftoverStep];
+        setVetoSteps(finalSteps);
+        setVetoCurrentStep(nextStep + 1);
+        setVetoCompleted(true);
+
+        // Definir mapas da partida
+        const pickedMaps = finalSteps
+          .filter((s) => s.action === "pick")
+          .map((s) => s.map);
+        const leftoverMap = remaining[0];
+
+        // BO1: só o leftover; BO3: picks + leftover (decider)
+        const matchMaps =
+          match && match.best_of >= 3
+            ? [...pickedMaps, leftoverMap]
+            : [leftoverMap];
+
+        // Salvar automaticamente
+        saveVetoData(finalSteps, matchMaps);
+      }
+    }
+  };
+
+  // Desfazer último passo do veto
+  const handleVetoUndo = () => {
+    if (vetoSteps.length === 0) return;
+
+    // Se completou, desfazer leftover + último step
+    if (vetoCompleted) {
+      const stepsWithoutLeftover = vetoSteps.filter((s) => s.action !== "leftover");
+      const undoneSteps = stepsWithoutLeftover.slice(0, -1);
+      setVetoSteps(undoneSteps);
+      setVetoCurrentStep(undoneSteps.length);
+      setVetoCompleted(false);
+      return;
+    }
+
+    const undoneSteps = vetoSteps.slice(0, -1);
+    setVetoSteps(undoneSteps);
+    setVetoCurrentStep(undoneSteps.length);
+  };
+
+  // Resetar veto completamente
+  const handleVetoReset = () => {
+    if (!confirm("Tem certeza que deseja resetar o veto?")) return;
+    setVetoSteps([]);
+    setVetoCurrentStep(0);
+    setVetoCompleted(false);
+    setVetoStarted(false);
+  };
+
+  // Salvar veto no banco e carregar no servidor
+  const saveVetoData = async (steps: VetoStep[], maps: string[]) => {
+    if (!match) return;
+    setVetoSaving(true);
+
+    const supabase = createBrowserSupabaseClient();
+    const vetoData: VetoData = {
+      first_team: vetoFirstTeam,
+      steps,
+      maps,
+      completed: true,
+    };
+
+    const { error } = await supabase
+      .from("matches")
+      .update({
+        veto_data: vetoData as any,
+        map_name: maps[0],
+      })
+      .eq("id", matchId);
+
+    if (error) {
+      alert(`Erro ao salvar veto: ${error.message}`);
+      setVetoSaving(false);
+      return;
+    }
+
+    // Carregar partida no servidor automaticamente
+    try {
+      const resp = await fetch(`/api/matches/${matchId}/load-server`, {
+        method: "POST",
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        alert(`Veto salvo! Erro ao carregar no servidor: ${data.error}`);
+      } else {
+        alert("Veto completo! Partida carregada no servidor. Aguardando jogadores...");
+      }
+    } catch {
+      alert("Veto salvo! Erro de conexao com o servidor.");
+    }
+
+    setVetoSaving(false);
+    fetchMatch();
+  };
+
+  // Recarregar partida no servidor (manual)
+  const handleLoadServer = async () => {
+    if (!match) return;
+    setLoadingServer(true);
+
+    try {
+      const resp = await fetch(`/api/matches/${matchId}/load-server`, {
+        method: "POST",
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        alert(`Erro: ${data.error}`);
+      } else {
+        alert("Partida carregada no servidor! Aguardando jogadores...");
+      }
+    } catch {
+      alert("Erro ao conectar com o servidor");
+    }
+
+    setLoadingServer(false);
   };
 
   const handleStartMatch = async () => {
@@ -107,7 +332,6 @@ export default function PartidaDetalhes() {
     const supabase = createBrowserSupabaseClient();
     const now = new Date();
 
-    // Atualizar partida para live
     const { error } = await supabase
       .from("matches")
       .update({
@@ -121,11 +345,9 @@ export default function PartidaDetalhes() {
     if (error) {
       alert(`Erro: ${error.message}`);
     } else {
-      // Verificar se houve atraso e propagar
       if (match.scheduled_at) {
         const scheduledTime = new Date(match.scheduled_at);
         const delayMinutes = Math.floor((now.getTime() - scheduledTime.getTime()) / 60000);
-
         if (delayMinutes > 5) {
           await propagateDelay(supabase, match.tournament_id, matchId, Math.max(delayMinutes, 10));
         }
@@ -151,7 +373,6 @@ export default function PartidaDetalhes() {
       if (m.scheduled_at) {
         const currentTime = new Date(m.scheduled_at);
         const newTime = new Date(currentTime.getTime() + delayMinutes * 60000);
-
         await supabase
           .from("matches")
           .update({ scheduled_at: newTime.toISOString() })
@@ -166,7 +387,6 @@ export default function PartidaDetalhes() {
       alert("A partida nao pode terminar empatada!");
       return;
     }
-
     if (!match.team1_id || !match.team2_id) {
       alert("Partida sem times definidos!");
       return;
@@ -174,12 +394,9 @@ export default function PartidaDetalhes() {
 
     setSaving(true);
     const supabase = createBrowserSupabaseClient();
-
-    // Determinar vencedor e perdedor
     const winnerId = finishScores.team1 > finishScores.team2 ? match.team1_id : match.team2_id;
     const loserId = finishScores.team1 > finishScores.team2 ? match.team2_id : match.team1_id;
 
-    // Atualizar partida
     const { error } = await supabase
       .from("matches")
       .update({
@@ -196,7 +413,6 @@ export default function PartidaDetalhes() {
     if (error) {
       alert(`Erro: ${error.message}`);
     } else {
-      // Avançar times no bracket
       await advanceTeamsInBracket(supabase, match.tournament_id, match.round || "", winnerId, loserId);
       setShowFinishModal(false);
       fetchMatch();
@@ -231,7 +447,6 @@ export default function PartidaDetalhes() {
     const advancement = bracketAdvancement[currentRound];
     if (!advancement) return;
 
-    // Avançar vencedor
     if (advancement.winnerGoesTo) {
       const winnerField = advancement.winnerPosition === "team1" ? "team1_id" : "team2_id";
       await supabase
@@ -240,7 +455,6 @@ export default function PartidaDetalhes() {
         .eq("tournament_id", tournamentId)
         .eq("round", advancement.winnerGoesTo);
 
-      // Verificar se partida pode ser ativada
       const { data: destMatch } = await supabase
         .from("matches")
         .select("*")
@@ -253,7 +467,6 @@ export default function PartidaDetalhes() {
       }
     }
 
-    // Enviar perdedor para loser bracket
     if (advancement.loserGoesTo && advancement.loserPosition) {
       const loserField = advancement.loserPosition === "team1" ? "team1_id" : "team2_id";
       await supabase
@@ -262,7 +475,6 @@ export default function PartidaDetalhes() {
         .eq("tournament_id", tournamentId)
         .eq("round", advancement.loserGoesTo);
 
-      // Verificar se partida pode ser ativada
       const { data: destMatch } = await supabase
         .from("matches")
         .select("*")
@@ -283,28 +495,6 @@ export default function PartidaDetalhes() {
       .update({ team1_score: team1Score, team2_score: team2Score })
       .eq("id", matchId);
     fetchMatch();
-  };
-
-  const handleLoadServer = async () => {
-    if (!match) return;
-    setLoadingServer(true);
-
-    try {
-      const resp = await fetch(`/api/matches/${matchId}/load-server`, {
-        method: "POST",
-      });
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        alert(`Erro: ${data.error}`);
-      } else {
-        alert("Partida carregada no servidor! Aguardando jogadores...");
-      }
-    } catch {
-      alert("Erro ao conectar com o servidor");
-    }
-
-    setLoadingServer(false);
   };
 
   const handleCancelMatch = async () => {
@@ -329,6 +519,21 @@ export default function PartidaDetalhes() {
       fetchMatch();
     }
     setSaving(false);
+  };
+
+  const handleSaveStream = async () => {
+    setSavingStream(true);
+    const supabase = createBrowserSupabaseClient();
+
+    const { error } = await supabase
+      .from("matches")
+      .update({ stream_url: streamUrl || null })
+      .eq("id", matchId);
+
+    if (error) {
+      alert(`Erro: ${error.message}`);
+    }
+    setSavingStream(false);
   };
 
   const formatDate = (dateString: string | null) => {
@@ -360,9 +565,19 @@ export default function PartidaDetalhes() {
 
   const status = statusColors[match.status] || statusColors.scheduled;
   const isPending = match.status === "pending";
+  const isScheduled = match.status === "scheduled";
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const isCancelled = match.status === "cancelled";
+
+  // Condições para mostrar seção de veto
+  const hasVetoData = match.veto_data && (match.veto_data as VetoData).completed;
+  const showVetoSection = isScheduled && !isLive && !isFinished && !isCancelled && match.team1_id && match.team2_id;
+
+  const team1Name = match.team1?.name || "Time 1";
+  const team2Name = match.team2?.name || "Time 2";
+  const team1Tag = match.team1?.tag || "T1";
+  const team2Tag = match.team2?.tag || "T2";
 
   return (
     <div className="space-y-6">
@@ -404,15 +619,15 @@ export default function PartidaDetalhes() {
           <div className="flex flex-col items-center gap-4 w-48">
             <div className="w-20 h-20 rounded-xl bg-[#27272A] flex items-center justify-center">
               <span className="text-2xl font-mono text-[#A1A1AA]">
-                {isPending ? "?" : match.team1?.tag?.substring(0, 2) || "?"}
+                {isPending ? "?" : team1Tag.substring(0, 2)}
               </span>
             </div>
             <div className="text-center">
               <p className={`font-display text-lg ${isPending ? "text-[#52525B] italic" : "text-[#F5F5DC]"}`}>
-                {isPending ? "A definir" : match.team1?.name}
+                {isPending ? "A definir" : team1Name}
               </p>
               {!isPending && (
-                <p className="font-mono text-xs text-[#52525B]">{match.team1?.tag}</p>
+                <p className="font-mono text-xs text-[#52525B]">{team1Tag}</p>
               )}
             </div>
           </div>
@@ -436,21 +651,21 @@ export default function PartidaDetalhes() {
           <div className="flex flex-col items-center gap-4 w-48">
             <div className="w-20 h-20 rounded-xl bg-[#27272A] flex items-center justify-center">
               <span className="text-2xl font-mono text-[#A1A1AA]">
-                {isPending ? "?" : match.team2?.tag?.substring(0, 2) || "?"}
+                {isPending ? "?" : team2Tag.substring(0, 2)}
               </span>
             </div>
             <div className="text-center">
               <p className={`font-display text-lg ${isPending ? "text-[#52525B] italic" : "text-[#F5F5DC]"}`}>
-                {isPending ? "A definir" : match.team2?.name}
+                {isPending ? "A definir" : team2Name}
               </p>
               {!isPending && (
-                <p className="font-mono text-xs text-[#52525B]">{match.team2?.tag}</p>
+                <p className="font-mono text-xs text-[#52525B]">{team2Tag}</p>
               )}
             </div>
           </div>
         </div>
 
-        {/* Cancel button - appears for non-finished, non-cancelled matches */}
+        {/* Cancel button */}
         {!isFinished && !isCancelled && (
           <div className="flex justify-end mt-4">
             <button
@@ -478,99 +693,96 @@ export default function PartidaDetalhes() {
           </div>
         )}
 
-        {/* Actions */}
-        {!isPending && !isFinished && !isCancelled && (
+        {/* Actions - Live controls */}
+        {isLive && (
           <div className="flex justify-center gap-4 mt-8 pt-8 border-t border-[#27272A]">
-            {!isLive && (
-              <>
+            {/* Score controls */}
+            <div className="flex items-center gap-4 px-4 py-2 bg-[#1a1a2e] rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#A1A1AA]">{team1Tag}</span>
                 <button
-                  onClick={handleLoadServer}
-                  disabled={loadingServer}
-                  className="flex items-center gap-2 px-6 py-3 bg-[#A855F7] hover:bg-[#9333EA] disabled:bg-[#A855F7]/50 text-white font-mono text-sm rounded-lg transition-colors"
+                  onClick={() => handleUpdateScore(Math.max(0, match.team1_score - 1), match.team2_score)}
+                  className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
                 >
-                  {loadingServer ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  )}
-                  CARREGAR NO SERVIDOR
+                  -
                 </button>
+                <span className="font-mono text-xl text-[#F5F5DC] w-8 text-center">{match.team1_score}</span>
                 <button
-                  onClick={handleStartMatch}
-                  disabled={saving}
-                  className="flex items-center gap-2 px-6 py-3 bg-[#22c55e] hover:bg-[#16a34a] disabled:bg-[#22c55e]/50 text-white font-mono text-sm rounded-lg transition-colors"
+                  onClick={() => handleUpdateScore(match.team1_score + 1, match.team2_score)}
+                  className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
                 >
-                  {saving ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  )}
-                  INICIAR PARTIDA
+                  +
                 </button>
-              </>
-            )}
+              </div>
 
-            {isLive && (
-              <>
-                {/* Score controls */}
-                <div className="flex items-center gap-4 px-4 py-2 bg-[#1a1a2e] rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-[#A1A1AA]">{match.team1?.tag}</span>
-                    <button
-                      onClick={() => handleUpdateScore(Math.max(0, match.team1_score - 1), match.team2_score)}
-                      className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
-                    >
-                      -
-                    </button>
-                    <span className="font-mono text-xl text-[#F5F5DC] w-8 text-center">{match.team1_score}</span>
-                    <button
-                      onClick={() => handleUpdateScore(match.team1_score + 1, match.team2_score)}
-                      className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
-                    >
-                      +
-                    </button>
-                  </div>
+              <span className="text-[#52525B]">|</span>
 
-                  <span className="text-[#52525B]">|</span>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleUpdateScore(match.team1_score, Math.max(0, match.team2_score - 1))}
-                      className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
-                    >
-                      -
-                    </button>
-                    <span className="font-mono text-xl text-[#F5F5DC] w-8 text-center">{match.team2_score}</span>
-                    <button
-                      onClick={() => handleUpdateScore(match.team1_score, match.team2_score + 1)}
-                      className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
-                    >
-                      +
-                    </button>
-                    <span className="text-xs text-[#A1A1AA]">{match.team2?.tag}</span>
-                  </div>
-                </div>
-
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    setFinishScores({ team1: match.team1_score, team2: match.team2_score });
-                    setShowFinishModal(true);
-                  }}
-                  className="flex items-center gap-2 px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] text-white font-mono text-sm rounded-lg transition-colors"
+                  onClick={() => handleUpdateScore(match.team1_score, Math.max(0, match.team2_score - 1))}
+                  className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                  </svg>
-                  FINALIZAR PARTIDA
+                  -
                 </button>
-              </>
-            )}
+                <span className="font-mono text-xl text-[#F5F5DC] w-8 text-center">{match.team2_score}</span>
+                <button
+                  onClick={() => handleUpdateScore(match.team1_score, match.team2_score + 1)}
+                  className="w-8 h-8 bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#F5F5DC] transition-colors"
+                >
+                  +
+                </button>
+                <span className="text-xs text-[#A1A1AA]">{team2Tag}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setFinishScores({ team1: match.team1_score, team2: match.team2_score });
+                setShowFinishModal(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] text-white font-mono text-sm rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+              FINALIZAR PARTIDA
+            </button>
+          </div>
+        )}
+
+        {/* Post-veto actions (scheduled, veto done, not live) */}
+        {isScheduled && !isLive && hasVetoData && (
+          <div className="flex justify-center gap-4 mt-8 pt-8 border-t border-[#27272A]">
+            <button
+              onClick={handleLoadServer}
+              disabled={loadingServer}
+              className="flex items-center gap-2 px-6 py-3 bg-[#A855F7] hover:bg-[#9333EA] disabled:bg-[#A855F7]/50 text-white font-mono text-sm rounded-lg transition-colors"
+            >
+              {loadingServer ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              )}
+              RECARREGAR NO SERVIDOR
+            </button>
+            <button
+              onClick={handleStartMatch}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-[#22c55e] hover:bg-[#16a34a] disabled:bg-[#22c55e]/50 text-white font-mono text-sm rounded-lg transition-colors"
+            >
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              INICIAR PARTIDA
+            </button>
           </div>
         )}
 
@@ -582,14 +794,246 @@ export default function PartidaDetalhes() {
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
               </svg>
               <span className="font-mono text-sm text-[#22c55e]">
-                VENCEDOR: {match.winner_id === match.team1_id ? match.team1?.name : match.team2?.name}
+                VENCEDOR: {match.winner_id === match.team1_id ? team1Name : team2Name}
               </span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Match Info */}
+      {/* Veto Section */}
+      {showVetoSection && (
+        <div className="bg-[#12121a] border border-[#27272A] rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-mono text-sm text-[#A855F7] tracking-wider">
+              VETO DE MAPAS
+            </h3>
+            {vetoCompleted && (
+              <span className="px-3 py-1 bg-[#22c55e]/20 text-[#22c55e] text-xs font-mono rounded">
+                COMPLETO
+              </span>
+            )}
+          </div>
+
+          {/* Escolha de quem começa */}
+          {!vetoStarted && (
+            <div className="space-y-4">
+              <p className="text-sm text-[#A1A1AA]">
+                Quem começa vetando? (definido por par/impar com os capitaes)
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setVetoFirstTeam("team1")}
+                  className={`flex-1 px-4 py-3 rounded-lg font-mono text-sm transition-colors border ${
+                    vetoFirstTeam === "team1"
+                      ? "bg-[#A855F7]/20 border-[#A855F7] text-[#A855F7]"
+                      : "bg-[#1a1a2e] border-[#27272A] text-[#A1A1AA] hover:border-[#3f3f46]"
+                  }`}
+                >
+                  {team1Name}
+                </button>
+                <button
+                  onClick={() => setVetoFirstTeam("team2")}
+                  className={`flex-1 px-4 py-3 rounded-lg font-mono text-sm transition-colors border ${
+                    vetoFirstTeam === "team2"
+                      ? "bg-[#A855F7]/20 border-[#A855F7] text-[#A855F7]"
+                      : "bg-[#1a1a2e] border-[#27272A] text-[#A1A1AA] hover:border-[#3f3f46]"
+                  }`}
+                >
+                  {team2Name}
+                </button>
+              </div>
+              <button
+                onClick={() => setVetoStarted(true)}
+                className="w-full px-4 py-3 bg-[#A855F7] hover:bg-[#9333EA] text-white font-mono text-sm rounded-lg transition-colors"
+              >
+                INICIAR VETO
+              </button>
+            </div>
+          )}
+
+          {/* Veto em andamento */}
+          {vetoStarted && (
+            <div className="space-y-6">
+              {/* Indicador de turno */}
+              {!vetoCompleted && (
+                <div className="flex items-center justify-center gap-3 py-3 bg-[#1a1a2e] rounded-lg">
+                  <div className={`w-3 h-3 rounded-full ${getCurrentActor() === "team1" ? "bg-[#3b82f6]" : "bg-[#f59e0b]"}`} />
+                  <span className="font-mono text-sm text-[#F5F5DC]">
+                    {getCurrentActor() === "team1" ? team1Name : team2Name}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-mono ${
+                    getCurrentAction() === "ban"
+                      ? "bg-[#ef4444]/20 text-[#ef4444]"
+                      : "bg-[#22c55e]/20 text-[#22c55e]"
+                  }`}>
+                    {getCurrentAction() === "ban" ? "BAN" : "PICK"}
+                  </span>
+                </div>
+              )}
+
+              {/* Grid de mapas */}
+              <div className="grid grid-cols-4 gap-3">
+                {CS2_MAP_POOL.map((map) => {
+                  const step = vetoSteps.find((s) => s.map === map);
+                  const isUsed = !!step;
+                  const isBanned = step?.action === "ban";
+                  const isPicked = step?.action === "pick";
+                  const isLeftover = step?.action === "leftover";
+                  const stepTeamName = step?.team === "team1" ? team1Tag : step?.team === "team2" ? team2Tag : "";
+
+                  return (
+                    <button
+                      key={map}
+                      onClick={() => !isUsed && !vetoCompleted && handleMapClick(map)}
+                      disabled={isUsed || vetoCompleted}
+                      className={`relative group rounded-xl overflow-hidden border-2 transition-all ${
+                        isPicked || isLeftover
+                          ? "border-[#22c55e] ring-1 ring-[#22c55e]/30"
+                          : isBanned
+                          ? "border-[#ef4444]/30 opacity-40"
+                          : "border-[#27272A] hover:border-[#A855F7]/50 hover:scale-[1.02]"
+                      } ${isUsed || vetoCompleted ? "cursor-default" : "cursor-pointer"}`}
+                    >
+                      {/* Map background */}
+                      <div className="aspect-[16/10] bg-[#1a1a2e] flex items-center justify-center">
+                        <span className="font-display text-lg text-[#F5F5DC]/60">
+                          {MAP_DISPLAY_NAMES[map] || map}
+                        </span>
+                      </div>
+
+                      {/* Map name bar */}
+                      <div className={`px-3 py-2 ${
+                        isPicked || isLeftover
+                          ? "bg-[#22c55e]/10"
+                          : isBanned
+                          ? "bg-[#ef4444]/10"
+                          : "bg-[#0f0f15]"
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs text-[#F5F5DC]">
+                            {MAP_DISPLAY_NAMES[map] || map}
+                          </span>
+                          {step && (
+                            <span className={`text-[10px] font-mono ${
+                              isBanned ? "text-[#ef4444]" : "text-[#22c55e]"
+                            }`}>
+                              {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
+                              {stepTeamName && ` (${stepTeamName})`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Overlay ban X */}
+                      {isBanned && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <svg className="w-16 h-16 text-[#ef4444]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </div>
+                      )}
+
+                      {/* Overlay pick check */}
+                      {(isPicked || isLeftover) && (
+                        <div className="absolute top-2 right-2">
+                          <svg className="w-6 h-6 text-[#22c55e]" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                          </svg>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Historico do veto */}
+              {vetoSteps.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-mono text-xs text-[#52525B] tracking-wider">HISTORICO</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {vetoSteps.map((step, i) => (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono ${
+                          step.action === "ban"
+                            ? "bg-[#ef4444]/10 text-[#ef4444]"
+                            : step.action === "pick"
+                            ? "bg-[#22c55e]/10 text-[#22c55e]"
+                            : "bg-[#3b82f6]/10 text-[#3b82f6]"
+                        }`}
+                      >
+                        <span>{step.order}.</span>
+                        <span>
+                          {step.team === "team1" ? team1Tag : step.team === "team2" ? team2Tag : "-"}
+                        </span>
+                        <span className="uppercase">{step.action === "leftover" ? "DECIDER" : step.action}</span>
+                        <span className="text-[#F5F5DC]">{MAP_DISPLAY_NAMES[step.map] || step.map}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Controles do veto */}
+              <div className="flex gap-3">
+                {!vetoCompleted && vetoSteps.length > 0 && (
+                  <button
+                    onClick={handleVetoUndo}
+                    className="px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] font-mono text-xs rounded-lg transition-colors"
+                  >
+                    DESFAZER
+                  </button>
+                )}
+                <button
+                  onClick={handleVetoReset}
+                  className="px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] font-mono text-xs rounded-lg transition-colors"
+                >
+                  RESETAR VETO
+                </button>
+                {vetoSaving && (
+                  <div className="flex items-center gap-2 px-4 py-2 text-[#A855F7] text-xs font-mono">
+                    <div className="w-4 h-4 border-2 border-[#A855F7] border-t-transparent rounded-full animate-spin" />
+                    Salvando e carregando no servidor...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Resumo do veto (se ja foi feito e carregado do banco) */}
+          {hasVetoData && !vetoStarted && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {(match.veto_data as VetoData).steps.map((step, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono ${
+                      step.action === "ban"
+                        ? "bg-[#ef4444]/10 text-[#ef4444]"
+                        : step.action === "pick"
+                        ? "bg-[#22c55e]/10 text-[#22c55e]"
+                        : "bg-[#3b82f6]/10 text-[#3b82f6]"
+                    }`}
+                  >
+                    <span>{step.order}.</span>
+                    <span>
+                      {step.team === "team1" ? team1Tag : step.team === "team2" ? team2Tag : "-"}
+                    </span>
+                    <span className="uppercase">{step.action === "leftover" ? "DECIDER" : step.action}</span>
+                    <span className="text-[#F5F5DC]">{MAP_DISPLAY_NAMES[step.map] || step.map}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-[#A1A1AA]">
+                Mapas: {(match.veto_data as VetoData).maps.map(m => MAP_DISPLAY_NAMES[m] || m).join(", ")}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Match Info + Stream */}
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-[#12121a] border border-[#27272A] rounded-xl p-6">
           <h3 className="font-mono text-sm text-[#A855F7] tracking-wider mb-4">INFORMACOES</h3>
@@ -609,7 +1053,7 @@ export default function PartidaDetalhes() {
             {match.map_name && (
               <div className="flex justify-between">
                 <span className="text-sm text-[#A1A1AA]">Mapa</span>
-                <span className="text-sm text-[#F5F5DC]">{match.map_name}</span>
+                <span className="text-sm text-[#F5F5DC]">{MAP_DISPLAY_NAMES[match.map_name] || match.map_name}</span>
               </div>
             )}
           </div>
@@ -634,6 +1078,34 @@ export default function PartidaDetalhes() {
         </div>
       </div>
 
+      {/* Stream URL */}
+      {!isCancelled && (
+        <div className="bg-[#12121a] border border-[#27272A] rounded-xl p-6">
+          <h3 className="font-mono text-sm text-[#A855F7] tracking-wider mb-4">STREAM</h3>
+          <div className="flex gap-3">
+            <input
+              type="url"
+              value={streamUrl}
+              onChange={(e) => setStreamUrl(e.target.value)}
+              placeholder="https://twitch.tv/canal ou https://youtube.com/..."
+              className="flex-1 px-4 py-2.5 bg-[#1a1a2e] border border-[#27272A] rounded-lg text-sm text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]"
+            />
+            <button
+              onClick={handleSaveStream}
+              disabled={savingStream}
+              className="px-6 py-2.5 bg-[#A855F7] hover:bg-[#9333EA] disabled:bg-[#A855F7]/50 text-white font-mono text-xs rounded-lg transition-colors"
+            >
+              {savingStream ? "SALVANDO..." : "SALVAR"}
+            </button>
+          </div>
+          {match.stream_url && (
+            <p className="mt-2 text-xs text-[#A1A1AA]">
+              Atual: <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="text-[#A855F7] hover:underline">{match.stream_url}</a>
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Finish Modal */}
       {showFinishModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -647,7 +1119,7 @@ export default function PartidaDetalhes() {
 
               <div className="flex items-center justify-center gap-6">
                 <div className="text-center">
-                  <p className="text-xs text-[#A1A1AA] mb-2">{match.team1?.name}</p>
+                  <p className="text-xs text-[#A1A1AA] mb-2">{team1Name}</p>
                   <input
                     type="number"
                     min="0"
@@ -658,7 +1130,7 @@ export default function PartidaDetalhes() {
                 </div>
                 <span className="text-2xl text-[#52525B]">:</span>
                 <div className="text-center">
-                  <p className="text-xs text-[#A1A1AA] mb-2">{match.team2?.name}</p>
+                  <p className="text-xs text-[#A1A1AA] mb-2">{team2Name}</p>
                   <input
                     type="number"
                     min="0"

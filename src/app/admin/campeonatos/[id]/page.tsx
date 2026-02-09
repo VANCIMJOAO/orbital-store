@@ -357,15 +357,8 @@ export default function CampeonatoDetalhes() {
         .update({ status: "ongoing" })
         .eq("id", tournamentId);
 
-      // Auto-carregar primeira partida (quarter 1) no servidor CS2
-      const firstMatch = createdMatches?.find((m: any) => m.round === "winner_quarter_1");
-      if (firstMatch) {
-        try {
-          await fetch(`/api/matches/${firstMatch.id}/load-server`, { method: "POST" });
-        } catch {
-          // load server error
-        }
-      }
+      // Partidas ficam "pending" aguardando times serem definidos
+      // Quartas já têm times → status "scheduled" aguardando veto do admin
     }
 
     setGenerating(false);

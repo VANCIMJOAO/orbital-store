@@ -7,6 +7,7 @@ import { useGOTV } from "@/hooks/useGOTV";
 import { supabase } from "@/lib/supabase";
 import { TournamentHeader } from "@/components/TournamentHeader";
 import type { GOTVPlayerState, GameLogEvent } from "@/lib/gotv/types";
+import { MAP_DISPLAY_NAMES } from "@/lib/constants";
 
 // Tipo para dados do Supabase (pré-match)
 interface SupabaseMatchData {
@@ -18,9 +19,18 @@ interface SupabaseMatchData {
   team1_score: number;
   team2_score: number;
   map_name: string | null;
+  veto_data: VetoDataType | null;
+  stream_url: string | null;
   team1: { id: string; name: string; tag: string; logo_url: string | null } | null;
   team2: { id: string; name: string; tag: string; logo_url: string | null } | null;
   tournament: { name: string } | null;
+}
+
+interface VetoDataType {
+  first_team: "team1" | "team2";
+  steps: { team: string; action: string; map: string; order: number }[];
+  maps: string[];
+  completed: boolean;
 }
 
 interface SupabasePlayer {
@@ -838,116 +848,140 @@ function LiveScorebot({
 
 // Componente de seção de Mapas (Veto)
 function MapsSection({
-  teamCT,
-  teamT,
+  team1Name,
+  team2Name,
   currentMap,
+  vetoData,
+  bestOf,
 }: {
-  teamCT: string;
-  teamT: string;
+  team1Name: string;
+  team2Name: string;
   currentMap: string;
+  vetoData: VetoDataType | null;
+  bestOf: number;
 }) {
-  // Mock de veto de mapas - depois será substituído por dados reais
-  const vetoSteps = [
-    { team: teamT, action: 'removed', map: 'Mirage' },
-    { team: teamCT, action: 'removed', map: 'Inferno' },
-    { team: teamT, action: 'picked', map: 'Overpass' },
-    { team: teamCT, action: 'picked', map: 'Nuke' },
-    { team: teamT, action: 'removed', map: 'Dust2' },
-    { team: teamCT, action: 'removed', map: 'Anubis' },
-    { team: '-', action: 'leftover', map: 'Ancient' },
-  ];
+  if (!vetoData || !vetoData.completed) {
+    return (
+      <div className="bg-[#12121a] border border-[#27272A] rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-[#27272A]">
+          <h3 className="font-mono text-sm text-[#F5F5DC]">MAPS</h3>
+          <span className="text-xs text-[#A1A1AA]">MD{bestOf || 1}</span>
+        </div>
+        <div className="p-4">
+          <p className="text-xs text-[#52525B] text-center">Aguardando veto...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Mock de mapas da série
-  const maps = [
-    { name: 'Overpass', teamCTScore: 13, teamTScore: 5, picker: teamT, status: 'completed', winner: teamCT },
-    { name: 'Nuke', teamCTScore: 6, teamTScore: 13, picker: teamCT, status: 'completed', winner: teamT },
-    { name: currentMap || 'Ancient', teamCTScore: 0, teamTScore: 0, picker: '-', status: 'live', winner: null },
-  ];
+  const getTeamName = (team: string) => {
+    if (team === "team1") return team1Name;
+    if (team === "team2") return team2Name;
+    return "-";
+  };
+
+  const getTeamColor = (team: string) => {
+    if (team === "team1") return "text-[#3b82f6]";
+    if (team === "team2") return "text-[#f59e0b]";
+    return "text-[#A1A1AA]";
+  };
 
   return (
     <div className="bg-[#12121a] border border-[#27272A] rounded-lg overflow-hidden">
       <div className="p-4 border-b border-[#27272A]">
         <h3 className="font-mono text-sm text-[#F5F5DC]">MAPS</h3>
-        <span className="text-xs text-[#A1A1AA]">Best of 3</span>
+        <span className="text-xs text-[#A1A1AA]">MD{bestOf || 1}</span>
       </div>
 
       {/* Veto de mapas */}
       <div className="p-4 border-b border-[#27272A] space-y-1.5">
-        {vetoSteps.map((step, index) => (
+        {vetoData.steps.map((step, index) => (
           <div key={index} className="text-xs font-mono">
-            <span className="text-[#A1A1AA]">{index + 1}. </span>
-            <span className={step.team === teamCT ? 'text-[#3b82f6]' : step.team === teamT ? 'text-[#f59e0b]' : 'text-[#A1A1AA]'}>
-              {step.team}
+            <span className="text-[#A1A1AA]">{step.order}. </span>
+            <span className={getTeamColor(step.team)}>
+              {getTeamName(step.team)}
             </span>
-            <span className={`ml-1 ${step.action === 'picked' ? 'text-green-500' : step.action === 'removed' ? 'text-red-500' : 'text-[#A1A1AA]'}`}>
-              {step.action}
+            <span className={`ml-1 ${
+              step.action === 'pick' ? 'text-green-500' :
+              step.action === 'ban' ? 'text-red-500' :
+              'text-[#3b82f6]'
+            }`}>
+              {step.action === 'ban' ? 'removed' : step.action === 'pick' ? 'picked' : 'leftover'}
             </span>
-            <span className="text-[#F5F5DC] ml-1">{step.map}</span>
+            <span className="text-[#F5F5DC] ml-1">{MAP_DISPLAY_NAMES[step.map] || step.map}</span>
           </div>
         ))}
       </div>
 
       {/* Mapas da série */}
       <div className="divide-y divide-[#27272A]">
-        {maps.map((map, index) => (
-          <div key={index} className={`p-3 ${map.status === 'live' ? 'bg-[#A855F7]/10' : ''}`}>
-            {/* Nome do mapa com badge */}
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`h-1 w-8 rounded ${
-                map.status === 'live' ? 'bg-[#A855F7]' :
-                map.winner === teamCT ? 'bg-[#3b82f6]' :
-                map.winner === teamT ? 'bg-[#f59e0b]' : 'bg-[#27272A]'
-              }`} />
-              <span className="font-display text-sm text-[#F5F5DC]">{map.name}</span>
-              {map.status === 'live' && (
-                <span className="px-1.5 py-0.5 bg-[#A855F7]/20 text-[#A855F7] text-[10px] font-mono rounded animate-pulse">
-                  LIVE
-                </span>
-              )}
-            </div>
+        {vetoData.maps.map((map, index) => {
+          const isCurrentMap = (MAP_DISPLAY_NAMES[map] || map) === (MAP_DISPLAY_NAMES[currentMap] || currentMap) ||
+            map === currentMap;
+          const isLive = isCurrentMap && index === 0; // Simplificado - primeiro mapa ativo
 
-            {/* Placar do mapa */}
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className={`font-display ${map.winner === teamCT ? 'text-[#3b82f6]' : 'text-[#A1A1AA]'}`}>
-                  {teamCT}
+          // Descobrir quem picou este mapa
+          const pickStep = vetoData.steps.find(s => s.map === map);
+          const picker = pickStep ? pickStep.team : "-";
+
+          return (
+            <div key={index} className={`p-3 ${isLive ? 'bg-[#A855F7]/10' : ''}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`h-1 w-8 rounded ${isLive ? 'bg-[#A855F7]' : 'bg-[#27272A]'}`} />
+                <span className="font-display text-sm text-[#F5F5DC]">
+                  {MAP_DISPLAY_NAMES[map] || map}
                 </span>
-                {map.picker === teamCT && (
-                  <span className="text-[8px] bg-[#3b82f6]/20 text-[#3b82f6] px-1 rounded">PICK</span>
+                {isLive && (
+                  <span className="px-1.5 py-0.5 bg-[#A855F7]/20 text-[#A855F7] text-[10px] font-mono rounded animate-pulse">
+                    LIVE
+                  </span>
                 )}
               </div>
-              <div className="font-mono">
-                <span className={map.winner === teamCT ? 'text-[#3b82f6]' : 'text-[#A1A1AA]'}>{map.teamCTScore}</span>
-                <span className="text-[#A1A1AA] mx-1">-</span>
-                <span className={map.winner === teamT ? 'text-[#f59e0b]' : 'text-[#A1A1AA]'}>{map.teamTScore}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {map.picker === teamT && (
-                  <span className="text-[8px] bg-[#f59e0b]/20 text-[#f59e0b] px-1 rounded">PICK</span>
-                )}
-                <span className={`font-display ${map.winner === teamT ? 'text-[#f59e0b]' : 'text-[#A1A1AA]'}`}>
-                  {teamT}
-                </span>
+
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-[#A1A1AA]">{team1Name}</span>
+                  {picker === "team1" && (
+                    <span className="text-[8px] bg-[#3b82f6]/20 text-[#3b82f6] px-1 rounded">PICK</span>
+                  )}
+                </div>
+                <div className="font-mono text-[#A1A1AA]">
+                  {pickStep?.action === "leftover" ? "DECIDER" : `MAP ${index + 1}`}
+                </div>
+                <div className="flex items-center gap-2">
+                  {picker === "team2" && (
+                    <span className="text-[8px] bg-[#f59e0b]/20 text-[#f59e0b] px-1 rounded">PICK</span>
+                  )}
+                  <span className="font-display text-[#A1A1AA]">{team2Name}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
 // Componente de seção Watch (Streams)
-function WatchSection() {
-  // Mock de streams - depois será substituído por dados reais
-  const streams = [
-    { name: 'HLTV Live', viewers: null, isOfficial: true, lang: null },
-    { name: 'zoneR', viewers: 2347, isOfficial: false, lang: '🇷🇺' },
-    { name: 'Lent', viewers: 759, isOfficial: false, lang: '🇷🇺' },
-    { name: 'CCT 2', viewers: 682, isOfficial: false, lang: '🇧🇷' },
-    { name: 'hooch', viewers: 584, isOfficial: false, lang: '🇷🇺' },
-    { name: 'BetBoom 3', viewers: 250, isOfficial: false, lang: '🇧🇷' },
-  ];
+function WatchSection({ streamUrl }: { streamUrl: string | null }) {
+  if (!streamUrl) {
+    return (
+      <div className="bg-[#12121a] border border-[#27272A] rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-[#27272A]">
+          <h3 className="font-mono text-sm text-[#F5F5DC]">WATCH</h3>
+        </div>
+        <div className="p-4">
+          <p className="text-xs text-[#52525B] text-center">Nenhuma stream disponivel</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Detectar plataforma
+  const isTwitch = streamUrl.includes("twitch.tv");
+  const isYoutube = streamUrl.includes("youtube.com") || streamUrl.includes("youtu.be");
+  const platformName = isTwitch ? "Twitch" : isYoutube ? "YouTube" : "Stream";
 
   return (
     <div className="bg-[#12121a] border border-[#27272A] rounded-lg overflow-hidden">
@@ -956,31 +990,33 @@ function WatchSection() {
       </div>
 
       <div className="divide-y divide-[#27272A]">
-        {streams.map((stream, index) => (
-          <div
-            key={index}
-            className={`p-3 flex items-center justify-between hover:bg-[#1a1a2e] cursor-pointer transition-colors ${
-              stream.isOfficial ? 'bg-[#A855F7]/10' : ''
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {stream.lang && <span className="text-sm">{stream.lang}</span>}
-              <span className={`text-sm ${stream.isOfficial ? 'text-[#A855F7] font-display' : 'text-[#F5F5DC]'}`}>
-                {stream.name}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {stream.viewers && (
-                <span className="text-xs font-mono text-[#A1A1AA]">{stream.viewers.toLocaleString()}</span>
-              )}
-              <svg className="w-4 h-4 text-[#A1A1AA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                <polyline points="15,3 21,3 21,9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
+        <a
+          href={streamUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-3 flex items-center justify-between hover:bg-[#1a1a2e] cursor-pointer transition-colors bg-[#A855F7]/10"
+        >
+          <div className="flex items-center gap-2">
+            {isTwitch && (
+              <svg className="w-4 h-4 text-[#9146FF]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
               </svg>
-            </div>
+            )}
+            {isYoutube && (
+              <svg className="w-4 h-4 text-[#FF0000]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+            )}
+            <span className="text-sm text-[#A855F7] font-display">
+              {platformName}
+            </span>
           </div>
-        ))}
+          <svg className="w-4 h-4 text-[#A1A1AA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+            <polyline points="15,3 21,3 21,9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </a>
       </div>
     </div>
   );
@@ -1480,7 +1516,7 @@ export default function MatchPage() {
         const { data: match, error } = await supabase
           .from("matches")
           .select(`
-            id, status, scheduled_at, round, best_of, team1_score, team2_score, map_name,
+            id, status, scheduled_at, round, best_of, team1_score, team2_score, map_name, veto_data, stream_url,
             team1:teams!matches_team1_id_fkey(id, name, tag, logo_url),
             team2:teams!matches_team2_id_fkey(id, name, tag, logo_url),
             tournament:tournaments!matches_tournament_id_fkey(name)
@@ -1770,9 +1806,11 @@ export default function MatchPage() {
             {/* Coluna esquerda: Maps */}
             <div className="order-2 lg:order-1">
               <MapsSection
-                teamCT={teamCTName}
-                teamT={teamTName}
+                team1Name={dbMatch?.team1?.name || "Time 1"}
+                team2Name={dbMatch?.team2?.name || "Time 2"}
                 currentMap={matchState?.mapName || dbMatch?.map_name || ""}
+                vetoData={dbMatch?.veto_data || null}
+                bestOf={dbMatch?.best_of || 1}
               />
             </div>
 
@@ -1846,7 +1884,7 @@ export default function MatchPage() {
 
             {/* Coluna direita: Watch */}
             <div className="order-3 lg:order-3">
-              <WatchSection />
+              <WatchSection streamUrl={dbMatch?.stream_url || null} />
             </div>
           </div>
         </div>

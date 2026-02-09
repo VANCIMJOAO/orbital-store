@@ -125,18 +125,18 @@ export async function GET(
       }
     });
 
-    // Determinar mapas - suporta Bo1 (mapa único) e Bo3/Bo5 (múltiplos mapas)
+    // Determinar mapas - usar veto_data.maps se disponível (BO1, BO3, BO5)
     const bestOf = match.best_of || 1;
     let maplist: string[];
 
-    if (bestOf > 1 && match.veto_data) {
-      // Bo3/Bo5: usar mapas definidos no veto
-      const veto = match.veto_data as { maps?: string[] };
-      maplist = veto.maps && veto.maps.length > 0
-        ? veto.maps
-        : [match.map_name || 'de_ancient'];
+    if (match.veto_data) {
+      const veto = match.veto_data as { maps?: string[]; completed?: boolean };
+      if (veto.completed && veto.maps && veto.maps.length > 0) {
+        maplist = veto.maps;
+      } else {
+        maplist = [match.map_name || 'de_ancient'];
+      }
     } else {
-      // Bo1: mapa único
       maplist = [match.map_name || 'de_ancient'];
     }
 
@@ -152,9 +152,9 @@ export async function GET(
     // Montar configuração do MatchZy
     const config: MatchZyConfig = {
       matchid: numericMatchId,
-      num_maps: bestOf,
+      num_maps: maplist.length,
       maplist: maplist,
-      skip_veto: true, // Por enquanto, skip veto
+      skip_veto: true, // Veto é feito no nosso sistema, não in-game
       side_type: 'knife', // Knife round para decidir lado
       players_per_team: 5,
       min_players_to_ready: 5,
