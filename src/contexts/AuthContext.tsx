@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useMemo, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, useMemo, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const hasProfileRef = useRef(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
@@ -117,7 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   const fetchProfile = async (userId: string) => {
-    setProfileLoading(true);
+    // Só mostrar loading se ainda não temos um profile (evitar flicker no header)
+    if (!hasProfileRef.current) setProfileLoading(true);
     try {
       // Usar fetch direto para evitar qualquer cache do cliente Supabase
       const response = await fetch(
@@ -134,13 +136,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!response.ok || !data || data.length === 0) {
         setProfile(null);
+        hasProfileRef.current = false;
         return;
       }
 
       const profileData = data[0] as UserProfile;
       setProfile(profileData);
+      hasProfileRef.current = true;
     } catch {
       setProfile(null);
+      hasProfileRef.current = false;
     } finally {
       setProfileLoading(false);
     }
@@ -199,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setProfile(null);
       setSession(null);
+      hasProfileRef.current = false;
       // Força refresh da página para limpar todo o estado
       window.location.href = "/campeonatos";
     }
