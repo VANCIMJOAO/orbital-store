@@ -1535,11 +1535,18 @@ export default function MatchPage() {
   );
 
   // Determinar nomes dos times (preferir team1/team2 do MatchZy quando disponíveis)
+  const isGenericName = (name: string) =>
+    !name || name === "Counter-Terrorists" || name === "Terrorists" || name === "CT" || name === "T";
+
   const getTeamName = (side: 'CT' | 'T', fallback: string) => {
+    // Preferir nomes do MatchZy (team1/team2 com sides)
     if (team1 && team2) {
-      if (team1.currentSide === side) return team1.name;
-      if (team2.currentSide === side) return team2.name;
+      if (team1.currentSide === side && !isGenericName(team1.name)) return team1.name;
+      if (team2.currentSide === side && !isGenericName(team2.name)) return team2.name;
     }
+    // Fallback do Supabase primeiro (mais confiável que GOTV genérico)
+    if (!isGenericName(fallback)) return fallback;
+    // Último recurso: GOTV
     if (side === 'CT' && matchState?.teamCT?.name) return matchState.teamCT.name;
     if (side === 'T' && matchState?.teamT?.name) return matchState.teamT.name;
     return fallback;
@@ -1744,8 +1751,12 @@ export default function MatchPage() {
           {/* Placar principal */}
           {matchState && (
             <MainScoreboard
-              teamCT={matchState.teamCT}
-              teamT={matchState.teamT}
+              teamCT={matchState.teamCT?.name && matchState.teamCT.name !== "Counter-Terrorists"
+                ? { name: matchState.teamCT.name, logo: matchState.teamCT.logoUrl }
+                : { name: dbMatch?.team1?.name || matchState.teamCT?.name || "Counter-Terrorists", logo: dbMatch?.team1?.logo_url || matchState.teamCT?.logoUrl }}
+              teamT={matchState.teamT?.name && matchState.teamT.name !== "Terrorists"
+                ? { name: matchState.teamT.name, logo: matchState.teamT.logoUrl }
+                : { name: dbMatch?.team2?.name || matchState.teamT?.name || "Terrorists", logo: dbMatch?.team2?.logo_url || matchState.teamT?.logoUrl }}
               scoreCT={matchState.scoreCT}
               scoreT={matchState.scoreT}
               mapName={matchState.mapName || dbMatch?.map_name || ""}
