@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { TournamentHeader } from "@/components/TournamentHeader";
 import type { Database } from "@/lib/database.types";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -41,7 +41,6 @@ interface TopPlayer {
 }
 
 export default function CampeonatosPage() {
-  const { user, profile, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
@@ -52,13 +51,6 @@ export default function CampeonatosPage() {
   const [topPlayers, setTopPlayers] = useState<TopPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"proximas" | "ao-vivo" | "finalizadas">("proximas");
-
-  const navLinks = [
-    { href: "/campeonatos/visao-geral", label: "VISÃO GERAL" },
-    { href: "/campeonatos/partidas", label: "PARTIDAS" },
-    { href: "/campeonatos/resultados", label: "RESULTADOS" },
-    { href: "/campeonatos/estatisticas", label: "ESTATÍSTICAS" },
-  ];
 
   useEffect(() => {
     async function fetchData() {
@@ -344,121 +336,7 @@ export default function CampeonatosPage() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
       {/* Menu Fixo no Topo */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-        <div className="h-full flex items-center justify-between px-6">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-              <span className="font-display text-[#A855F7] text-lg">O</span>
-            </div>
-            <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
-              ORBITAL ROXA
-            </span>
-          </Link>
-
-          {/* Navegação Central */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider">
-              INÍCIO
-            </Link>
-            <Link href="/campeonatos" className="font-mono text-xs text-[#A855F7] tracking-wider">
-              CAMPEONATOS
-            </Link>
-            <Link href="/store" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider">
-              LOJA
-            </Link>
-            <Link href="/comunidade" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider">
-              COMUNIDADE
-            </Link>
-          </nav>
-
-          {/* Área do Usuário */}
-          <div className="flex items-center gap-4">
-            {user ? (
-              <>
-                {/* Notificações */}
-                <button className="relative p-2 hover:bg-[#27272A] rounded-lg transition-colors">
-                  <svg className="w-5 h-5 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                  {/* Badge de notificação */}
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-                </button>
-
-                {/* Divisor */}
-                <div className="w-px h-8 bg-[#27272A]" />
-
-                {/* Link Admin (se for admin) */}
-                {profile?.is_admin && (
-                  <Link
-                    href="/admin"
-                    className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
-                    title="Painel Admin"
-                  >
-                    <svg className="w-5 h-5 text-[#eab308]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </Link>
-                )}
-
-                {/* Avatar e Info do Usuário */}
-                <Link
-                  href="/campeonatos/perfil"
-                  className="flex items-center gap-3 cursor-pointer hover:bg-[#27272A] rounded-lg p-2 transition-colors"
-                >
-                  <div className="text-right hidden sm:block">
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-xs font-body text-[#F5F5DC]">
-                        {authLoading ? "..." : profile?.username || "Usuário"}
-                      </span>
-                      {profile?.is_admin && (
-                        <span className="px-1.5 py-0.5 bg-[#eab308]/20 border border-[#eab308]/50 rounded text-[8px] font-mono text-[#eab308]">
-                          ADMIN
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-mono text-[#A855F7]">
-                      Nível {profile?.level || 1}
-                    </span>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#A855F7] to-[#7C3AED] flex items-center justify-center border-2 border-[#A855F7]/50">
-                    <span className="font-mono text-white text-sm font-bold">
-                      {authLoading ? "..." : (profile?.username?.[0] || "U").toUpperCase()}
-                    </span>
-                  </div>
-                </Link>
-
-                {/* Botão de Sair */}
-                <button
-                  onClick={() => signOut()}
-                  className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
-                  title="Sair"
-                >
-                  <svg className="w-5 h-5 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                </button>
-              </>
-            ) : (
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/campeonatos/login"
-                  className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider"
-                >
-                  ENTRAR
-                </Link>
-                <Link
-                  href="/campeonatos/cadastro"
-                  className="font-mono text-xs bg-[#A855F7] hover:bg-[#9333EA] text-white px-4 py-2 rounded-lg transition-colors tracking-wider"
-                >
-                  CADASTRAR
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <TournamentHeader />
 
       {/* Container Principal - abaixo do menu fixo */}
       <div className="flex flex-1 pt-16">
@@ -777,21 +655,6 @@ export default function CampeonatosPage() {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Links de Navegação */}
-          <div className="border-b border-[#27272A] bg-[#0f0f15]">
-            <div className="flex justify-center gap-2">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="px-8 py-4 font-mono text-sm tracking-wider transition-colors text-[#A1A1AA] hover:text-[#F5F5DC] hover:bg-[#27272A]/50"
-                >
-                  {link.label}
-                </Link>
-              ))}
             </div>
           </div>
 
