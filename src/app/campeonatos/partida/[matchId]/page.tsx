@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useGOTV } from "@/hooks/useGOTV";
 import { supabase } from "@/lib/supabase";
+import { TournamentHeader } from "@/components/TournamentHeader";
 import type { GOTVPlayerState, GameLogEvent } from "@/lib/gotv/types";
 
 // Tipo para dados do Supabase (pré-match)
@@ -1571,18 +1572,7 @@ export default function MatchPage() {
   if (dbError && !dbMatch && !matchState) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-        <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-          <div className="h-full flex items-center justify-between px-6">
-            <Link href="/campeonatos" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-                <span className="font-display text-[#A855F7] text-lg">O</span>
-              </div>
-              <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
-                ORBITAL ROXA
-              </span>
-            </Link>
-          </div>
-        </header>
+        <TournamentHeader />
         <main className="flex-1 pt-20 pb-8 px-6 flex items-center justify-center">
           <div className="text-center">
             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#27272A] flex items-center justify-center">
@@ -1621,32 +1611,12 @@ export default function MatchPage() {
 
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-        {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-          <div className="h-full flex items-center justify-between px-6">
-            <Link href="/campeonatos" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-                <span className="font-display text-[#A855F7] text-lg">O</span>
-              </div>
-              <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
-                ORBITAL ROXA
-              </span>
-            </Link>
-
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <Link href="/campeonatos" className="text-[#A1A1AA] hover:text-[#F5F5DC]">CAMPEONATOS</Link>
-              <span className="text-[#A1A1AA]">/</span>
-              <span className="text-[#A855F7]">PARTIDA</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-yellow-500/20 border border-yellow-500/50 text-yellow-500">
-                <span className="w-2 h-2 rounded-full bg-yellow-500" />
-                {dbMatch.status === 'live' ? 'AO VIVO' : 'AGENDADA'}
-              </span>
-            </div>
-          </div>
-        </header>
+        <TournamentHeader rightContent={
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-yellow-500/20 border border-yellow-500/50 text-yellow-500">
+            <span className="w-2 h-2 rounded-full bg-yellow-500" />
+            {dbMatch.status === 'live' ? 'AO VIVO' : 'AGENDADA'}
+          </span>
+        } />
 
         {/* Conteúdo pré-partida */}
         <main className="flex-1 pt-20 pb-8 px-4">
@@ -1770,38 +1740,16 @@ export default function MatchPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-        <div className="h-full flex items-center justify-between px-6">
-          <Link href="/campeonatos" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-              <span className="font-display text-[#A855F7] text-lg">O</span>
-            </div>
-            <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
-              ORBITAL ROXA
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <Link href="/campeonatos" className="text-[#A1A1AA] hover:text-[#F5F5DC]">CAMPEONATOS</Link>
-            <span className="text-[#A1A1AA]">/</span>
-            <Link href="/campeonatos/ao-vivo" className="text-[#A1A1AA] hover:text-[#F5F5DC]">AO VIVO</Link>
-            <span className="text-[#A1A1AA]">/</span>
-            <span className="text-[#A855F7]">PARTIDA</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono ${
-              isConnected
-                ? "bg-green-500/20 border border-green-500/50 text-green-500"
-                : "bg-red-500/20 border border-red-500/50 text-red-500"
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-              {isConnected ? "CONECTADO" : "DESCONECTADO"}
-            </span>
-          </div>
-        </div>
-      </header>
+      <TournamentHeader rightContent={
+        <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono ${
+          isConnected
+            ? "bg-green-500/20 border border-green-500/50 text-green-500"
+            : "bg-red-500/20 border border-red-500/50 text-red-500"
+        }`}>
+          <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
+          {isConnected ? "CONECTADO" : "DESCONECTADO"}
+        </span>
+      } />
 
       {/* Conteúdo */}
       <main className="flex-1 pt-20 pb-8 px-4">

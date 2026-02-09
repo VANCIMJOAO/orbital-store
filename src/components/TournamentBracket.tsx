@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 
 interface Team {
   name: string;
@@ -140,6 +140,12 @@ function BracketConnector({ direction = "right", height = 60 }: { direction?: "r
 
 export default function TournamentBracket({ matches, onMatchClick }: TournamentBracketProps) {
   const [view, setView] = useState<"winner" | "loser" | "all">("all");
+  const [zoom, setZoom] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 0.15, 2)), []);
+  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.15, 0.4)), []);
+  const handleZoomReset = useCallback(() => setZoom(1), []);
 
   // Organizar partidas por round
   const getMatchesByRound = (roundPrefix: string) => {
@@ -161,39 +167,81 @@ export default function TournamentBracket({ matches, onMatchClick }: TournamentB
 
   return (
     <div className="space-y-6">
-      {/* View Toggle */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setView("all")}
-          className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${
-            view === "all"
-              ? "bg-[#A855F7] text-white"
-              : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
-          }`}
-        >
-          TODOS
-        </button>
-        <button
-          onClick={() => setView("winner")}
-          className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${
-            view === "winner"
-              ? "bg-[#22c55e] text-white"
-              : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
-          }`}
-        >
-          WINNER
-        </button>
-        <button
-          onClick={() => setView("loser")}
-          className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${
-            view === "loser"
-              ? "bg-[#ef4444] text-white"
-              : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
-          }`}
-        >
-          LOSER
-        </button>
+      {/* View Toggle + Zoom Controls */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView("all")}
+            className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${
+              view === "all"
+                ? "bg-[#A855F7] text-white"
+                : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
+            }`}
+          >
+            TODOS
+          </button>
+          <button
+            onClick={() => setView("winner")}
+            className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${
+              view === "winner"
+                ? "bg-[#22c55e] text-white"
+                : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
+            }`}
+          >
+            WINNER
+          </button>
+          <button
+            onClick={() => setView("loser")}
+            className={`px-3 py-1.5 rounded text-xs font-mono transition-colors ${
+              view === "loser"
+                ? "bg-[#ef4444] text-white"
+                : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
+            }`}
+          >
+            LOSER
+          </button>
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleZoomOut}
+            className="w-8 h-8 flex items-center justify-center bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#A1A1AA] transition-colors"
+            title="Diminuir zoom"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+            </svg>
+          </button>
+          <button
+            onClick={handleZoomReset}
+            className="px-2 h-8 flex items-center justify-center bg-[#27272A] hover:bg-[#3f3f46] rounded text-[10px] font-mono text-[#A1A1AA] transition-colors min-w-[3rem]"
+            title="Resetar zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={handleZoomIn}
+            className="w-8 h-8 flex items-center justify-center bg-[#27272A] hover:bg-[#3f3f46] rounded text-[#A1A1AA] transition-colors"
+            title="Aumentar zoom"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* Zoomable Container */}
+      <div
+        ref={containerRef}
+        className="overflow-auto touch-pan-x touch-pan-y"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <div
+          className="space-y-6 origin-top-left transition-transform duration-150"
+          style={{ transform: `scale(${zoom})`, width: zoom < 1 ? `${100 / zoom}%` : undefined }}
+        >
 
       {/* Winner Bracket */}
       {(view === "all" || view === "winner") && (
@@ -353,6 +401,9 @@ export default function TournamentBracket({ matches, onMatchClick }: TournamentB
           </p>
         </div>
       )}
+
+        </div>{/* end zoomable */}
+      </div>{/* end overflow container */}
     </div>
   );
 }

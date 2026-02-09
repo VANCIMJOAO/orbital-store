@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { Database } from '@/lib/database.types';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('profile-stats');
 
 const supabase = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,7 +47,7 @@ export async function GET(
 
     return fetchPlayerStats(profile);
   } catch (error) {
-    console.error('Erro ao buscar stats do jogador:', error);
+    log.error('Erro ao buscar stats do jogador', error);
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }

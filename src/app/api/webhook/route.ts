@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("stripe-webhook");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-01-28.clover",
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (err) {
-    console.error("Webhook signature verification failed:", err);
+    log.error("Webhook signature verification failed", err);
     return NextResponse.json(
       { error: "Webhook signature verification failed" },
       { status: 400 }
@@ -48,14 +51,14 @@ export async function POST(request: NextRequest) {
       }
       case "payment_intent.payment_failed": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log(`Payment failed: ${paymentIntent.id}`);
+        log.warn(`Payment failed: ${paymentIntent.id}`);
         break;
       }
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("Webhook handler error:", error);
+    log.error("Webhook handler error", error);
     return NextResponse.json(
       { error: "Webhook handler failed" },
       { status: 500 }
@@ -82,7 +85,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .single();
 
   if (orderError) {
-    console.error("Error creating order:", orderError);
+    log.error("Error creating order", orderError);
     throw orderError;
   }
 
@@ -120,5 +123,5 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       .eq("id", item.variantId);
   }
 
-  console.log(`Order created: ${order.id}`);
+  log.info(`Order created: ${order.id}`);
 }

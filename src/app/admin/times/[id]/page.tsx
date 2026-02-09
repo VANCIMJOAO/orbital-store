@@ -29,6 +29,28 @@ interface TeamPlayer {
   profile: Player;
 }
 
+function SteamIdInput({ value, onSave, validate }: { value: string; onSave: (val: string) => void; validate: (id: string) => boolean }) {
+  const [localVal, setLocalVal] = useState(value);
+  const isInvalid = localVal.length > 0 && !validate(localVal);
+  return (
+    <div>
+      <input
+        type="text"
+        value={localVal}
+        onChange={(e) => setLocalVal(e.target.value)}
+        onBlur={() => { if (localVal !== value) onSave(localVal); }}
+        placeholder="76561198XXXXXXXXX"
+        className={`bg-[#1a1a2e] border rounded px-2 py-1 text-xs font-mono text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50 w-44 ${
+          isInvalid ? "border-[#ef4444]/50" : "border-[#27272A]"
+        }`}
+      />
+      {isInvalid && (
+        <p className="text-[9px] text-[#ef4444] mt-0.5">Formato: 7656119XXXXXXXXXX</p>
+      )}
+    </div>
+  );
+}
+
 export default function TeamPlayersPage() {
   const params = useParams();
   const teamId = params.id as string;
@@ -111,7 +133,7 @@ export default function TeamPlayersPage() {
       setPlayerNickname("");
       fetchData();
     } else {
-      console.error("Erro ao adicionar jogador:", error);
+      // add player error
     }
   };
 
@@ -129,11 +151,14 @@ export default function TeamPlayersPage() {
     }
   };
 
+  const isValidSteamId = (id: string) => /^7656119\d{10}$/.test(id);
+
   const handleUpdateSteamId = async (teamPlayerId: string, steamId: string) => {
+    if (steamId && !isValidSteamId(steamId)) return; // Só salva se vazio ou válido
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase
       .from("team_players")
-      .update({ steam_id: steamId })
+      .update({ steam_id: steamId || null })
       .eq("id", teamPlayerId);
 
     if (!error) {
@@ -268,12 +293,10 @@ export default function TeamPlayersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <input
-                      type="text"
+                    <SteamIdInput
                       value={tp.steam_id || tp.profile.steam_id || ""}
-                      onChange={(e) => handleUpdateSteamId(tp.id, e.target.value)}
-                      placeholder="76561198XXXXXXXXX"
-                      className="bg-[#1a1a2e] border border-[#27272A] rounded px-2 py-1 text-xs font-mono text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50 w-44"
+                      onSave={(val) => handleUpdateSteamId(tp.id, val)}
+                      validate={isValidSteamId}
                     />
                   </td>
                   <td className="px-6 py-4">

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/admin-auth";
+import { createLogger } from "@/lib/logger";
 
-// Usar anon key para operações públicas (RLS deve permitir)
+const log = createLogger("match-start");
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// POST - Iniciar partida manualmente
+// POST - Iniciar partida manualmente (admin only)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
   const { id: matchId } = await params;
   const now = new Date();
 
@@ -23,7 +29,7 @@ export async function POST(
     .single();
 
   if (fetchError || !match) {
-    console.error("[API] Error fetching match:", fetchError);
+    log.error("Error fetching match", fetchError);
     return NextResponse.json({ error: "Match not found", details: fetchError?.message }, { status: 404 });
   }
 
@@ -49,7 +55,7 @@ export async function POST(
     .single();
 
   if (updateError) {
-    console.error("[API] Error updating match:", updateError);
+    log.error("Error updating match", updateError);
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 

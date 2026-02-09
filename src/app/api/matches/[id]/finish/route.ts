@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/admin-auth";
+import { createLogger } from "@/lib/logger";
 
-// Usar anon key para operações públicas (RLS deve permitir)
+const log = createLogger("match-finish");
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// POST - Finalizar partida manualmente
+// POST - Finalizar partida manualmente (admin only)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
   const { id: matchId } = await params;
   const body = await request.json();
   const { team1_score, team2_score } = body;
@@ -112,7 +118,7 @@ async function advanceTeamsInBracket(
 
   const advancement = bracketAdvancement[currentRound];
   if (!advancement) {
-    console.log("[Bracket] No advancement mapping for round:", currentRound);
+    log.info("No advancement mapping for round: " + currentRound);
     return;
   }
 
@@ -126,7 +132,7 @@ async function advanceTeamsInBracket(
       .eq("tournament_id", tournamentId)
       .eq("round", advancement.winnerGoesTo);
 
-    console.log(`[Bracket] Advanced winner ${winnerId} to ${advancement.winnerGoesTo} as ${advancement.winnerPosition}`);
+    log.info(`Advanced winner ${winnerId} to ${advancement.winnerGoesTo} as ${advancement.winnerPosition}`);
 
     // Verificar se partida de destino pode ser ativada
     await checkAndActivateMatch(tournamentId, advancement.winnerGoesTo);
@@ -142,7 +148,7 @@ async function advanceTeamsInBracket(
       .eq("tournament_id", tournamentId)
       .eq("round", advancement.loserGoesTo);
 
-    console.log(`[Bracket] Sent loser ${loserId} to ${advancement.loserGoesTo} as ${advancement.loserPosition}`);
+    log.info(`Sent loser ${loserId} to ${advancement.loserGoesTo} as ${advancement.loserPosition}`);
 
     // Verificar se partida de destino pode ser ativada
     await checkAndActivateMatch(tournamentId, advancement.loserGoesTo);
@@ -166,7 +172,7 @@ async function checkAndActivateMatch(tournamentId: string, round: string) {
       .update({ status: "scheduled" })
       .eq("id", match.id);
 
-    console.log(`[Bracket] Activated match ${match.id} (${round})`);
+    log.info(`Activated match ${match.id} (${round})`);
 
     // Auto-carregar partida no servidor CS2 via Pterodactyl
     await autoLoadMatchOnServer(match.id);
@@ -194,7 +200,7 @@ async function sendPterodactylCommand(cmd: string) {
 
   if (!resp.ok) {
     const errorText = await resp.text();
-    console.error(`[AutoLoad] Pterodactyl error for "${cmd}":`, resp.status, errorText);
+    log.error(`Pterodactyl error for "${cmd}": ${resp.status}`, errorText);
     throw new Error(`Erro ao enviar comando: ${resp.status}`);
   }
 
@@ -208,7 +214,7 @@ async function autoLoadMatchOnServer(matchId: string) {
   const serverId = process.env.PTERODACTYL_SERVER_ID;
 
   if (!pterodactylUrl || !pterodactylKey || !serverId) {
-    console.log("[AutoLoad] Pterodactyl não configurado, pulando auto-load");
+    log.info("Pterodactyl não configurado, pulando auto-load");
     return;
   }
 
@@ -218,7 +224,7 @@ async function autoLoadMatchOnServer(matchId: string) {
   try {
     // 1. Encerrar partida anterior (MatchZy rejeita loadmatch se já tem partida ativa)
     await sendPterodactylCommand("css_endmatch");
-    console.log("[AutoLoad] css_endmatch enviado");
+    log.info("css_endmatch enviado");
 
     // 2. Aguardar MatchZy processar o endmatch
     await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -227,8 +233,8 @@ async function autoLoadMatchOnServer(matchId: string) {
     const loadCommand = `matchzy_loadmatch_url "${configUrl}"`;
     await sendPterodactylCommand(loadCommand);
 
-    console.log(`[AutoLoad] Partida ${matchId} carregada automaticamente no servidor: ${loadCommand}`);
+    log.info(`Partida ${matchId} carregada automaticamente: ${loadCommand}`);
   } catch (error) {
-    console.error("[AutoLoad] Falha ao carregar partida:", error);
+    log.error("Falha ao carregar partida automaticamente", error);
   }
 }

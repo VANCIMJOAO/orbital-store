@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+
+interface TeamTournament {
+  id: string;
+  name: string;
+}
 
 interface Team {
   id: string;
@@ -11,6 +16,7 @@ interface Team {
   logo_url: string | null;
   created_at: string | null;
   player_count?: number;
+  tournaments?: TeamTournament[];
 }
 
 export default function TimesAdmin() {
@@ -19,7 +25,10 @@ export default function TimesAdmin() {
   const [showModal, setShowModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [form, setForm] = useState({ name: "", tag: "" });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
   const fetchTeams = async () => {
     const supabase = createBrowserSupabaseClient();
@@ -27,14 +36,18 @@ export default function TimesAdmin() {
       .from("teams")
       .select(`
         *,
-        team_players(count)
+        team_players(count),
+        tournament_teams(tournament:tournaments(id, name))
       `)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setTeams(data.map(t => ({
+      setTeams(data.map((t: any) => ({
         ...t,
-        player_count: t.team_players?.[0]?.count || 0
+        player_count: t.team_players?.[0]?.count || 0,
+        tournaments: (t.tournament_teams || [])
+          .map((tt: any) => tt.tournament)
+          .filter(Boolean),
       })));
     }
     setLoading(false);
@@ -48,11 +61,32 @@ export default function TimesAdmin() {
     if (team) {
       setEditingTeam(team);
       setForm({ name: team.name, tag: team.tag });
+      setLogoPreview(team.logo_url);
     } else {
       setEditingTeam(null);
       setForm({ name: "", tag: "" });
+      setLogoPreview(null);
     }
+    setLogoFile(null);
     setShowModal(true);
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const uploadLogo = async (tag: string): Promise<string | null> => {
+    if (!logoFile) return null;
+    const formData = new FormData();
+    formData.append("file", logoFile);
+    formData.append("tag", tag);
+    const res = await fetch("/api/upload/logo", { method: "POST", body: formData });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.url || null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,22 +95,41 @@ export default function TimesAdmin() {
 
     const supabase = createBrowserSupabaseClient();
 
+    // Upload logo se selecionada
+    let logoUrl: string | null = null;
+    if (logoFile) {
+      logoUrl = await uploadLogo(form.tag);
+      if (!logoUrl) {
+        alert("Erro ao fazer upload da logo. Tente novamente.");
+        setSaving(false);
+        return;
+      }
+    }
+
     if (editingTeam) {
       const { error } = await supabase
         .from("teams")
-        .update({ name: form.name, tag: form.tag.toUpperCase() })
+        .update({
+          name: form.name,
+          tag: form.tag.toUpperCase(),
+          ...(logoUrl ? { logo_url: logoUrl } : {}),
+        })
         .eq("id", editingTeam.id);
 
       if (error) {
-        console.error("Erro ao atualizar time:", error);
+        alert("Erro ao atualizar time: " + error.message);
       }
     } else {
       const { error } = await supabase
         .from("teams")
-        .insert({ name: form.name, tag: form.tag.toUpperCase() });
+        .insert({
+          name: form.name,
+          tag: form.tag.toUpperCase(),
+          ...(logoUrl ? { logo_url: logoUrl } : {}),
+        });
 
       if (error) {
-        console.error("Erro ao criar time:", error);
+        alert("Erro ao criar time: " + error.message);
       }
     }
 
@@ -92,11 +145,19 @@ export default function TimesAdmin() {
     const { error } = await supabase.from("teams").delete().eq("id", id);
 
     if (error) {
-      console.error("Erro ao excluir time:", error);
+      alert("Erro ao excluir time: " + error.message);
     } else {
       fetchTeams();
     }
   };
+
+  const filteredTeams = useMemo(() => {
+    if (!search.trim()) return teams;
+    const q = search.toLowerCase();
+    return teams.filter(
+      (t) => t.name.toLowerCase().includes(q) || t.tag.toLowerCase().includes(q)
+    );
+  }, [teams, search]);
 
   return (
     <div className="space-y-6">
@@ -126,6 +187,8 @@ export default function TimesAdmin() {
         <input
           type="text"
           placeholder="Buscar time..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-[#12121a] border border-[#27272A] rounded-lg pl-10 pr-4 py-2 text-sm text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50"
         />
       </div>
@@ -140,7 +203,7 @@ export default function TimesAdmin() {
               <div className="h-3 bg-[#27272A] rounded w-1/2 mx-auto" />
             </div>
           ))
-        ) : teams.length === 0 ? (
+        ) : filteredTeams.length === 0 ? (
           <div className="col-span-full bg-[#12121a] border border-dashed border-[#A855F7]/30 rounded-xl p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-[#A855F7]/10 flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-[#A855F7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,16 +223,20 @@ export default function TimesAdmin() {
             </button>
           </div>
         ) : (
-          teams.map((team) => (
+          filteredTeams.map((team) => (
             <div
               key={team.id}
               className="bg-[#12121a] border border-[#27272A] hover:border-[#A855F7]/50 rounded-xl p-6 transition-all group"
             >
               {/* Logo */}
-              <div className="w-16 h-16 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center mx-auto mb-4 group-hover:border-[#A855F7]/50 transition-colors">
-                <span className="font-mono text-lg text-[#A1A1AA] font-bold">
-                  {team.tag}
-                </span>
+              <div className="w-16 h-16 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center mx-auto mb-4 group-hover:border-[#A855F7]/50 transition-colors overflow-hidden">
+                {team.logo_url ? (
+                  <img src={team.logo_url} alt={team.name} className="w-full h-full object-contain" />
+                ) : (
+                  <span className="font-mono text-lg text-[#A1A1AA] font-bold">
+                    {team.tag}
+                  </span>
+                )}
               </div>
 
               {/* Info */}
@@ -178,6 +245,19 @@ export default function TimesAdmin() {
                 <p className="text-[10px] font-mono text-[#A1A1AA] mt-1">
                   {team.player_count || 0} jogadores
                 </p>
+                {team.tournaments && team.tournaments.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-1 mt-2">
+                    {team.tournaments.map((t) => (
+                      <Link
+                        key={t.id}
+                        href={`/admin/campeonatos/${t.id}`}
+                        className="px-2 py-0.5 bg-[#A855F7]/10 border border-[#A855F7]/20 rounded text-[9px] font-mono text-[#A855F7] hover:bg-[#A855F7]/20 transition-colors"
+                      >
+                        {t.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -251,6 +331,42 @@ export default function TimesAdmin() {
                   maxLength={5}
                   className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50 uppercase"
                 />
+              </div>
+
+              {/* Logo Upload */}
+              <div>
+                <label className="block text-xs font-mono text-[#A1A1AA] mb-2">
+                  LOGO DO TIME
+                </label>
+                <div className="flex items-center gap-4">
+                  {/* Preview */}
+                  <div className="w-16 h-16 rounded-lg bg-[#1a1a2e] border border-[#27272A] flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="font-mono text-xs text-[#52525B]">
+                        {form.tag || "LOGO"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <label className="flex items-center gap-2 px-4 py-2 bg-[#1a1a2e] border border-[#27272A] hover:border-[#A855F7]/50 rounded-lg cursor-pointer transition-colors">
+                      <svg className="w-4 h-4 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-xs text-[#A1A1AA]">
+                        {logoFile ? logoFile.name : "Escolher imagem"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                        onChange={handleLogoChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-[10px] text-[#52525B] mt-1">PNG, JPG, WebP ou SVG. Max 5MB.</p>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 mt-6">

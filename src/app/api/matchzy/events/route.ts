@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("matchzy-webhook");
 
 // Criar cliente Supabase com service role para bypass RLS
 const supabase = createClient(
@@ -46,11 +49,11 @@ async function resolveMatchId(rawMatchId: string): Promise<string | null> {
 
   if (data?.id) {
     matchIdCache.set(rawMatchId, data.id);
-    console.log(`[MatchZy Webhook] Resolved matchId ${rawMatchId} → ${data.id}`);
+    log.info(`Resolved matchId ${rawMatchId} → ${data.id}`);
     return data.id;
   }
 
-  console.error(`[MatchZy Webhook] Failed to resolve matchId: ${rawMatchId}`);
+  log.error(`Failed to resolve matchId: ${rawMatchId}`);
   return null;
 }
 
@@ -59,18 +62,18 @@ export async function POST(request: NextRequest) {
     // Verificar autenticação
     const authHeader = request.headers.get("Authorization");
     if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-      console.log("[MatchZy Webhook] Unauthorized request");
+      log.info("[MatchZy Webhook] Unauthorized request");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const event: MatchZyEvent = await request.json();
-    console.log("[MatchZy Webhook] Received event:", event.event, "matchid:", event.matchid);
+    log.info(`Received event: ${event.event} matchid: ${event.matchid}`);
 
     // Resolver matchId numérico para UUID antes de processar
     if (event.matchid) {
       const resolvedId = await resolveMatchId(String(event.matchid));
       if (!resolvedId) {
-        console.error("[MatchZy Webhook] Could not resolve matchId:", event.matchid);
+        log.error(" Could not resolve matchId:", event.matchid);
         return NextResponse.json({ error: "Match not found" }, { status: 404 });
       }
       event.matchid = resolvedId;
@@ -99,12 +102,12 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        console.log("[MatchZy Webhook] Unknown event type:", event.event);
+        log.info("[MatchZy Webhook] Unknown event type:", event.event);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[MatchZy Webhook] Error:", error);
+    log.error(" Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -130,11 +133,11 @@ async function handleGoingLive(event: MatchZyEvent) {
     .single();
 
   if (error) {
-    console.error("[MatchZy Webhook] Error updating match to live:", error);
+    log.error(" Error updating match to live:", error);
     return;
   }
 
-  console.log("[MatchZy Webhook] Match going live:", matchId);
+  log.info(" Match going live:", matchId);
 
   // Verificar se houve atraso e propagar para partidas seguintes
   if (match?.scheduled_at) {
@@ -163,7 +166,7 @@ async function handleRoundEnd(event: MatchZyEvent) {
     .eq("id", matchId);
 
   if (error) {
-    console.error("[MatchZy Webhook] Error updating scores:", error);
+    log.error(" Error updating scores:", error);
   }
 }
 
@@ -183,7 +186,7 @@ async function handleMapResult(event: MatchZyEvent) {
     .single();
 
   if (fetchError || !match) {
-    console.error("[MatchZy Webhook] Error fetching match for map_result:", fetchError);
+    log.error(" Error fetching match for map_result:", fetchError);
     // Fallback: apenas atualizar scores
     await supabase
       .from("matches")
@@ -210,7 +213,7 @@ async function handleMapResult(event: MatchZyEvent) {
     .eq("id", matchId);
 
   if (updateError) {
-    console.error("[MatchZy Webhook] Error updating map result:", updateError);
+    log.error(" Error updating map result:", updateError);
   }
 
   console.log(
@@ -220,7 +223,7 @@ async function handleMapResult(event: MatchZyEvent) {
 
   // Se Bo1, a partida terminou com este mapa
   if ((match.best_of || 1) <= 1) {
-    console.log("[MatchZy Webhook] Bo1 map finished, triggering series end");
+    log.info(" Bo1 map finished, triggering series end");
     await handleSeriesEnd(event);
     return;
   }
@@ -250,13 +253,13 @@ async function handleSeriesEnd(event: MatchZyEvent) {
     .single();
 
   if (fetchError || !match) {
-    console.error("[MatchZy Webhook] Error fetching match for series_end:", fetchError);
+    log.error(" Error fetching match for series_end:", fetchError);
     return;
   }
 
   // Evitar finalizar duas vezes (GOTV server também chama /finish)
   if (match.status === "finished") {
-    console.log("[MatchZy Webhook] Match already finished, skipping:", matchId);
+    log.info(" Match already finished, skipping:", matchId);
     return;
   }
 
@@ -277,7 +280,7 @@ async function handleSeriesEnd(event: MatchZyEvent) {
     .eq("id", matchId);
 
   if (updateError) {
-    console.error("[MatchZy Webhook] Error finishing match:", updateError);
+    log.error(" Error finishing match:", updateError);
     return;
   }
 
@@ -295,7 +298,7 @@ async function handleSeriesEnd(event: MatchZyEvent) {
 
 // Time escolheu lado
 async function handleSidePicked(event: MatchZyEvent) {
-  console.log("[MatchZy Webhook] Side picked:", event);
+  log.info(" Side picked:", event);
 }
 
 // Propagar atraso para partidas seguintes
@@ -310,7 +313,7 @@ async function propagateDelay(tournamentId: string, currentMatchId: string, dela
     .order("scheduled_at", { ascending: true });
 
   if (error || !futureMatches) {
-    console.error("[MatchZy Webhook] Error fetching future matches:", error);
+    log.error(" Error fetching future matches:", error);
     return;
   }
 
@@ -371,7 +374,7 @@ async function advanceTeamsInBracket(
 
   const advancement = bracketAdvancement[currentRound];
   if (!advancement) {
-    console.log("[MatchZy Webhook] No advancement mapping for round:", currentRound);
+    log.info(" No advancement mapping for round:", currentRound);
     return;
   }
 
@@ -386,7 +389,7 @@ async function advanceTeamsInBracket(
       .eq("round", advancement.winnerGoesTo);
 
     if (winnerError) {
-      console.error("[MatchZy Webhook] Error advancing winner:", winnerError);
+      log.error(" Error advancing winner:", winnerError);
     } else {
       console.log(`[MatchZy Webhook] Advanced winner ${winnerId} to ${advancement.winnerGoesTo} as ${advancement.winnerPosition}`);
     }
@@ -405,7 +408,7 @@ async function advanceTeamsInBracket(
       .eq("round", advancement.loserGoesTo);
 
     if (loserError) {
-      console.error("[MatchZy Webhook] Error sending loser to bracket:", loserError);
+      log.error(" Error sending loser to bracket:", loserError);
     } else {
       console.log(`[MatchZy Webhook] Sent loser ${loserId} to ${advancement.loserGoesTo} as ${advancement.loserPosition}`);
     }

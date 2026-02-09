@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { Database } from '@/lib/database.types';
+import { requireAdmin } from '@/lib/admin-auth';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('match-config');
 
 // Supabase client com service role para acesso admin
 const supabase = createClient<Database>(
@@ -181,7 +185,7 @@ export async function GET(
 
     return NextResponse.json(config);
   } catch (error) {
-    console.error('Erro ao gerar config MatchZy:', error);
+    log.error('Erro ao gerar config MatchZy', error);
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }
@@ -189,12 +193,15 @@ export async function GET(
   }
 }
 
-// POST /api/matches/[id]/config
+// POST /api/matches/[id]/config (admin only)
 // Salva uma configuração customizada para a partida
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id: matchId } = await params;
     const body = await request.json();
@@ -226,7 +233,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, config: body });
   } catch (error) {
-    console.error('Erro ao salvar config MatchZy:', error);
+    log.error('Erro ao salvar config MatchZy', error);
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -32,28 +32,99 @@ export default function PartidasAdmin() {
   const router = useRouter();
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showReschedule, setShowReschedule] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [savingReschedule, setSavingReschedule] = useState(false);
+
+  const fetchMatches = async () => {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from("matches")
+      .select(`
+        *,
+        tournament:tournaments(name),
+        team1:teams!matches_team1_id_fkey(name, tag),
+        team2:teams!matches_team2_id_fkey(name, tag)
+      `)
+      .order("scheduled_at", { ascending: false });
+
+    if (!error && data) {
+      setMatches(data);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchMatches = async () => {
-      const supabase = createBrowserSupabaseClient();
-      const { data, error } = await supabase
-        .from("matches")
-        .select(`
-          *,
-          tournament:tournaments(name),
-          team1:teams!matches_team1_id_fkey(name, tag),
-          team2:teams!matches_team2_id_fkey(name, tag)
-        `)
-        .order("scheduled_at", { ascending: false });
-
-      if (!error && data) {
-        setMatches(data);
-      }
-      setLoading(false);
-    };
-
     fetchMatches();
   }, []);
+
+  const filteredMatches = useMemo(() => {
+    let result = matches;
+    if (statusFilter) {
+      result = result.filter((m) => m.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (m) =>
+          m.team1?.name?.toLowerCase().includes(q) ||
+          m.team2?.name?.toLowerCase().includes(q) ||
+          m.team1?.tag?.toLowerCase().includes(q) ||
+          m.team2?.tag?.toLowerCase().includes(q) ||
+          m.tournament?.name?.toLowerCase().includes(q) ||
+          m.round?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [matches, search, statusFilter]);
+
+  const openReschedule = (matchId: string, currentDate: string | null) => {
+    setShowReschedule(matchId);
+    setRescheduleDate(currentDate ? currentDate.slice(0, 16) : "");
+  };
+
+  const handleReschedule = async () => {
+    if (!showReschedule) return;
+    setSavingReschedule(true);
+
+    const supabase = createBrowserSupabaseClient();
+    const updates: Record<string, string | null> = {
+      scheduled_at: rescheduleDate || null,
+    };
+    // Se tem data e status é pending, muda pra scheduled
+    if (rescheduleDate) {
+      const match = matches.find((m) => m.id === showReschedule);
+      if (match?.status === "pending") {
+        updates.status = "scheduled";
+      }
+    }
+
+    const { error } = await supabase
+      .from("matches")
+      .update(updates)
+      .eq("id", showReschedule);
+
+    if (error) {
+      alert("Erro ao reagendar: " + error.message);
+    } else {
+      setShowReschedule(null);
+      fetchMatches();
+    }
+    setSavingReschedule(false);
+  };
+
+  const handleDeleteMatch = async (matchId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta partida?")) return;
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("matches").delete().eq("id", matchId);
+    if (error) {
+      alert("Erro ao excluir partida: " + error.message);
+    } else {
+      fetchMatches();
+    }
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
@@ -75,7 +146,9 @@ export default function PartidasAdmin() {
         </div>
 
         <button
+          onClick={() => router.push("/admin/campeonatos")}
           className="flex items-center gap-2 px-4 py-2 bg-[#A855F7] hover:bg-[#9333EA] text-white font-mono text-xs rounded-lg transition-colors"
+          title="Partidas sao criadas via bracket do campeonato"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -93,12 +166,19 @@ export default function PartidasAdmin() {
           <input
             type="text"
             placeholder="Buscar partida..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-[#12121a] border border-[#27272A] rounded-lg pl-10 pr-4 py-2 text-sm text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50"
           />
         </div>
 
-        <select className="bg-[#12121a] border border-[#27272A] rounded-lg px-4 py-2 text-sm text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="bg-[#12121a] border border-[#27272A] rounded-lg px-4 py-2 text-sm text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50"
+        >
           <option value="">Todos os status</option>
+          <option value="pending">A Definir</option>
           <option value="scheduled">Agendada</option>
           <option value="live">Ao Vivo</option>
           <option value="finished">Finalizada</option>
@@ -139,7 +219,7 @@ export default function PartidasAdmin() {
                   </td>
                 </tr>
               ))
-            ) : matches.length === 0 ? (
+            ) : filteredMatches.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center">
                   <div className="flex flex-col items-center gap-4">
@@ -156,7 +236,7 @@ export default function PartidasAdmin() {
                 </td>
               </tr>
             ) : (
-              matches.map((match) => {
+              filteredMatches.map((match) => {
                 const status = statusColors[match.status] || statusColors.pending;
                 const isPending = match.status === "pending";
                 return (
@@ -223,6 +303,15 @@ export default function PartidasAdmin() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={(e) => { e.stopPropagation(); openReschedule(match.id, match.scheduled_at); }}
+                          className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
+                          title="Reagendar"
+                        >
+                          <svg className="w-4 h-4 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                        <button
                           onClick={(e) => { e.stopPropagation(); router.push(`/admin/partidas/${match.id}`); }}
                           className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
                           title="Ver detalhes"
@@ -232,6 +321,7 @@ export default function PartidasAdmin() {
                           </svg>
                         </button>
                         <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteMatch(match.id); }}
                           className="p-2 hover:bg-[#ef4444]/20 rounded-lg transition-colors"
                           title="Excluir"
                         >
@@ -248,6 +338,44 @@ export default function PartidasAdmin() {
           </tbody>
         </table>
       </div>
+      {/* Modal Reagendar */}
+      {showReschedule && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] border border-[#27272A] rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="font-display text-xl text-[#F5F5DC] mb-6">Reagendar Partida</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-[#A1A1AA] mb-2">
+                  DATA E HORA
+                </label>
+                <input
+                  type="datetime-local"
+                  value={rescheduleDate}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  className="w-full bg-[#1a1a2e] border border-[#27272A] rounded-lg px-4 py-3 text-[#F5F5DC] focus:outline-none focus:border-[#A855F7]/50"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowReschedule(null)}
+                  className="flex-1 px-4 py-3 bg-[#27272A] hover:bg-[#3f3f46] text-[#F5F5DC] font-mono text-xs rounded-lg transition-colors"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  onClick={handleReschedule}
+                  disabled={savingReschedule}
+                  className="flex-1 px-4 py-3 bg-[#A855F7] hover:bg-[#9333EA] disabled:bg-[#A855F7]/50 text-white font-mono text-xs rounded-lg transition-colors"
+                >
+                  {savingReschedule ? "SALVANDO..." : "SALVAR"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

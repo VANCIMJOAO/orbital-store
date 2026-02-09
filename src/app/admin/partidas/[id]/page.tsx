@@ -45,6 +45,7 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
   pending: { bg: "bg-[#52525B]/20", text: "text-[#A1A1AA]", label: "A DEFINIR" },
   live: { bg: "bg-[#ef4444]/20", text: "text-[#ef4444]", label: "AO VIVO" },
   finished: { bg: "bg-[#22c55e]/20", text: "text-[#22c55e]", label: "FINALIZADA" },
+  cancelled: { bg: "bg-[#f59e0b]/20", text: "text-[#f59e0b]", label: "CANCELADA" },
 };
 
 const roundNames: Record<string, string> = {
@@ -118,7 +119,6 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      console.error("Erro ao iniciar partida:", error);
       alert(`Erro: ${error.message}`);
     } else {
       // Verificar se houve atraso e propagar
@@ -194,7 +194,6 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      console.error("Erro ao finalizar partida:", error);
       alert(`Erro: ${error.message}`);
     } else {
       // Avançar times no bracket
@@ -308,6 +307,30 @@ export default function PartidaDetalhes() {
     setLoadingServer(false);
   };
 
+  const handleCancelMatch = async () => {
+    if (!match) return;
+    if (!confirm("Tem certeza que deseja cancelar esta partida? Essa acao nao pode ser desfeita.")) return;
+
+    setSaving(true);
+    const supabase = createBrowserSupabaseClient();
+
+    const { error } = await supabase
+      .from("matches")
+      .update({
+        status: "cancelled",
+        match_phase: "cancelled",
+        is_live: false,
+      })
+      .eq("id", matchId);
+
+    if (error) {
+      alert(`Erro: ${error.message}`);
+    } else {
+      fetchMatch();
+    }
+    setSaving(false);
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "-";
     return new Date(dateString).toLocaleString("pt-BR", {
@@ -339,6 +362,7 @@ export default function PartidaDetalhes() {
   const isPending = match.status === "pending";
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
+  const isCancelled = match.status === "cancelled";
 
   return (
     <div className="space-y-6">
@@ -426,8 +450,36 @@ export default function PartidaDetalhes() {
           </div>
         </div>
 
+        {/* Cancel button - appears for non-finished, non-cancelled matches */}
+        {!isFinished && !isCancelled && (
+          <div className="flex justify-end mt-4">
+            <button
+              onClick={handleCancelMatch}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-[#f59e0b]/10 border border-[#f59e0b]/30 hover:bg-[#f59e0b]/20 text-[#f59e0b] font-mono text-xs rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              CANCELAR PARTIDA
+            </button>
+          </div>
+        )}
+
+        {/* Cancelled badge */}
+        {isCancelled && (
+          <div className="flex justify-center mt-8 pt-8 border-t border-[#27272A]">
+            <div className="flex items-center gap-3 px-6 py-3 bg-[#f59e0b]/10 border border-[#f59e0b]/30 rounded-lg">
+              <svg className="w-6 h-6 text-[#f59e0b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              <span className="font-mono text-sm text-[#f59e0b]">PARTIDA CANCELADA</span>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
-        {!isPending && !isFinished && (
+        {!isPending && !isFinished && !isCancelled && (
           <div className="flex justify-center gap-4 mt-8 pt-8 border-t border-[#27272A]">
             {!isLive && (
               <>

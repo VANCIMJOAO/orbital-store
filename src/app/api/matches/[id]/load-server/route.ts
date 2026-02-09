@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/admin-auth";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("load-server");
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// POST /api/matches/[id]/load-server
+// POST /api/matches/[id]/load-server (admin only)
 // Envia comando matchzy_loadmatch_url para o servidor CS2 via Pterodactyl API
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
   const { id: matchId } = await params;
 
   // Validar env vars do Pterodactyl
@@ -61,7 +68,7 @@ export async function POST(
     );
     if (!resp.ok) {
       const errorText = await resp.text();
-      console.error(`[LoadServer] Pterodactyl error for "${cmd}":`, resp.status, errorText);
+      log.error(`Pterodactyl error for "${cmd}": ${resp.status}`, errorText);
       throw new Error(`Erro ao enviar comando: ${resp.status}`);
     }
     return resp;
@@ -70,7 +77,7 @@ export async function POST(
   try {
     // 1. Encerrar partida anterior (css_endmatch é o comando correto do CounterStrikeSharp)
     await sendCommand("css_endmatch");
-    console.log("[LoadServer] css_endmatch enviado");
+    log.info("css_endmatch enviado");
 
     // 2. Aguardar o MatchZy processar o endmatch antes de carregar nova partida
     await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -78,7 +85,7 @@ export async function POST(
     // 3. Carregar nova partida via URL
     const loadCommand = `matchzy_loadmatch_url "${configUrl}"`;
     await sendCommand(loadCommand);
-    console.log(`[LoadServer] Comando enviado para o servidor: ${loadCommand}`);
+    log.info(`Comando enviado: ${loadCommand}`);
 
     return NextResponse.json({
       success: true,
@@ -86,7 +93,7 @@ export async function POST(
       command: loadCommand,
     });
   } catch (error) {
-    console.error("[LoadServer] Fetch error:", error);
+    log.error("Fetch error", error);
     return NextResponse.json(
       { error: "Falha ao conectar com o servidor" },
       { status: 502 }

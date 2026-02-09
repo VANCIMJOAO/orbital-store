@@ -3,14 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createLogger } from "@/lib/logger";
 
-const log = createLogger("upload-banner");
+const log = createLogger("upload-logo");
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const BUCKET_NAME = "banners";
+const BUCKET_NAME = "logos";
 
 async function ensureBucketExists() {
   const { data: buckets } = await supabase.storage.listBuckets();
@@ -18,15 +18,14 @@ async function ensureBucketExists() {
   if (!exists) {
     await supabase.storage.createBucket(BUCKET_NAME, {
       public: true,
-      allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
-      fileSizeLimit: 10 * 1024 * 1024, // 10MB
+      allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"],
+      fileSizeLimit: 5 * 1024 * 1024, // 5MB
     });
   } else {
-    // Atualizar limite se bucket ja existe
     await supabase.storage.updateBucket(BUCKET_NAME, {
       public: true,
-      allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"],
-      fileSizeLimit: 10 * 1024 * 1024, // 10MB
+      allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"],
+      fileSizeLimit: 5 * 1024 * 1024,
     });
   }
 }
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const slug = formData.get("slug") as string | null;
+    const teamTag = formData.get("tag") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest) {
     await ensureBucketExists();
 
     const fileExt = file.name.split(".").pop();
-    const fileName = `${slug || "banner"}-${Date.now()}.${fileExt}`;
+    const fileName = `${(teamTag || "team").toLowerCase()}-${Date.now()}.${fileExt}`;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: urlData.publicUrl });
   } catch (error) {
-    log.error("Banner upload error", error);
+    log.error("Logo upload error", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

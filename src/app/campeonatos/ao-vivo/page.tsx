@@ -4,7 +4,19 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { TournamentHeader } from "@/components/TournamentHeader";
 import { useGOTVMatches, useGOTV } from "@/hooks/useGOTV";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { GOTVPlayerState, KillFeedEntry } from "@/lib/gotv/types";
+
+interface DBLiveMatch {
+  id: string;
+  team1: { name: string; tag: string } | null;
+  team2: { name: string; tag: string } | null;
+  team1_score: number;
+  team2_score: number;
+  scheduled_at: string | null;
+  round: string | null;
+  tournament: { name: string } | null;
+}
 
 // Componente para exibir uma partida ao vivo
 function LiveMatchViewer({ matchId }: { matchId: string }) {
@@ -273,6 +285,32 @@ function KillFeedRow({ kill }: { kill: KillFeedEntry }) {
 export default function AoVivoPage() {
   const { matches, isLoading, serverOffline } = useGOTVMatches();
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
+  const [dbLiveMatches, setDbLiveMatches] = useState<DBLiveMatch[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+
+  // Buscar partidas live do banco quando GOTV está offline
+  useEffect(() => {
+    if (!serverOffline) return;
+    setDbLoading(true);
+    const supabase = createBrowserSupabaseClient();
+    supabase
+      .from("matches")
+      .select(`
+        id,
+        team1_score,
+        team2_score,
+        scheduled_at,
+        round,
+        tournament:tournaments(name),
+        team1:teams!matches_team1_id_fkey(name, tag),
+        team2:teams!matches_team2_id_fkey(name, tag)
+      `)
+      .eq("status", "live")
+      .then(({ data }) => {
+        if (data) setDbLiveMatches(data as DBLiveMatch[]);
+        setDbLoading(false);
+      });
+  }, [serverOffline]);
 
   // Filtrar partidas ativas (atualizadas nos últimos 2 minutos) e ordenar pela mais recente
   const activeMatches = useMemo(() => {
@@ -327,19 +365,87 @@ export default function AoVivoPage() {
           <h1 className="font-display text-2xl text-[#F5F5DC] mb-6">PARTIDAS AO VIVO</h1>
 
           {serverOffline ? (
-            <div className="bg-[#12121a] border border-red-500/30 rounded-lg p-8 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="space-y-6">
+              <div className="bg-[#12121a] border border-[#eab308]/30 rounded-lg p-4 flex items-center gap-3">
+                <svg className="w-5 h-5 text-[#eab308] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
+                <div>
+                  <p className="text-[#eab308] text-sm font-medium">Servidor GOTV offline</p>
+                  <p className="text-[#A1A1AA] text-xs">
+                    Dados em tempo real indisponiveis. Mostrando partidas ao vivo do banco de dados.
+                  </p>
+                </div>
               </div>
-              <h2 className="font-display text-xl text-red-500 mb-2">Servidor GOTV Offline</h2>
-              <p className="text-[#A1A1AA] text-sm mb-4">
-                O servidor de partidas ao vivo não está respondendo.
-              </p>
-              <p className="text-xs font-mono text-[#A1A1AA]">
-                Verifique se o gotv-server.exe está rodando na porta 8080
-              </p>
+
+              {dbLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 border-2 border-[#A855F7] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[#A1A1AA] font-mono text-sm">Carregando...</span>
+                  </div>
+                </div>
+              ) : dbLiveMatches.length === 0 ? (
+                <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-12 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#27272A] flex items-center justify-center">
+                    <svg className="w-8 h-8 text-[#A1A1AA]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <h2 className="font-display text-xl text-[#F5F5DC] mb-2">Nenhuma partida ao vivo</h2>
+                  <p className="text-[#A1A1AA] text-sm">
+                    Nao ha partidas em andamento no momento.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {dbLiveMatches.map((match) => (
+                    <Link
+                      key={match.id}
+                      href={`/campeonatos/partida/${match.id}`}
+                      className="bg-[#12121a] border border-[#27272A] hover:border-[#A855F7]/30 rounded-xl p-6 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-xs font-mono text-[#A1A1AA]">
+                          {match.tournament?.name || "Campeonato"}
+                        </span>
+                        <span className="flex items-center gap-1.5 px-2 py-1 bg-[#ef4444]/20 rounded text-[10px] font-mono text-[#ef4444]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444] animate-pulse" />
+                          AO VIVO
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-6">
+                        <div className="text-center">
+                          <div className="w-12 h-12 rounded bg-[#27272A] flex items-center justify-center mb-2">
+                            <span className="text-xs font-mono text-[#A1A1AA]">{match.team1?.tag || "T1"}</span>
+                          </div>
+                          <span className="text-sm text-[#F5F5DC]">{match.team1?.name || "Time 1"}</span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="font-display text-3xl text-[#F5F5DC]">{match.team1_score}</span>
+                          <span className="text-[#52525B]">:</span>
+                          <span className="font-display text-3xl text-[#F5F5DC]">{match.team2_score}</span>
+                        </div>
+
+                        <div className="text-center">
+                          <div className="w-12 h-12 rounded bg-[#27272A] flex items-center justify-center mb-2">
+                            <span className="text-xs font-mono text-[#A1A1AA]">{match.team2?.tag || "T2"}</span>
+                          </div>
+                          <span className="text-sm text-[#F5F5DC]">{match.team2?.name || "Time 2"}</span>
+                        </div>
+                      </div>
+
+                      {match.round && (
+                        <p className="text-center text-[10px] font-mono text-[#52525B] mt-3 capitalize">
+                          {match.round.replaceAll("_", " ")}
+                        </p>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-12">
