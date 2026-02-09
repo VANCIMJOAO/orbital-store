@@ -245,7 +245,13 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
             case 'match_state':
               if (message.data && 'mapName' in message.data) {
                 const state = message.data as GOTVMatchState;
-                setMatchState(state);
+                setMatchState(prev => {
+                  // Preservar mapName existente se o novo estado vier com valor vazio
+                  if (prev && prev.mapName && !state.mapName) {
+                    return { ...state, mapName: prev.mapName };
+                  }
+                  return state;
+                });
                 setPlayers(state.players);
               }
               break;

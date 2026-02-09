@@ -17,6 +17,7 @@ interface SupabaseMatchData {
   best_of: number;
   team1_score: number;
   team2_score: number;
+  map_name: string | null;
   team1: { id: string; name: string; tag: string; logo_url: string | null } | null;
   team2: { id: string; name: string; tag: string; logo_url: string | null } | null;
   tournament: { name: string } | null;
@@ -1479,7 +1480,7 @@ export default function MatchPage() {
         const { data: match, error } = await supabase
           .from("matches")
           .select(`
-            id, status, scheduled_at, round, best_of, team1_score, team2_score,
+            id, status, scheduled_at, round, best_of, team1_score, team2_score, map_name,
             team1:teams!matches_team1_id_fkey(id, name, tag, logo_url),
             team2:teams!matches_team2_id_fkey(id, name, tag, logo_url),
             tournament:tournaments!matches_tournament_id_fkey(name)
@@ -1611,12 +1612,7 @@ export default function MatchPage() {
 
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-        <TournamentHeader rightContent={
-          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono bg-yellow-500/20 border border-yellow-500/50 text-yellow-500">
-            <span className="w-2 h-2 rounded-full bg-yellow-500" />
-            {dbMatch.status === 'live' ? 'AO VIVO' : 'AGENDADA'}
-          </span>
-        } />
+        <TournamentHeader />
 
         {/* Conteúdo pré-partida */}
         <main className="flex-1 pt-20 pb-8 px-4">
@@ -1740,16 +1736,7 @@ export default function MatchPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      <TournamentHeader rightContent={
-        <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono ${
-          isConnected
-            ? "bg-green-500/20 border border-green-500/50 text-green-500"
-            : "bg-red-500/20 border border-red-500/50 text-red-500"
-        }`}>
-          <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-          {isConnected ? "CONECTADO" : "DESCONECTADO"}
-        </span>
-      } />
+      <TournamentHeader />
 
       {/* Conteúdo */}
       <main className="flex-1 pt-20 pb-8 px-4">
@@ -1761,7 +1748,7 @@ export default function MatchPage() {
               teamT={matchState.teamT}
               scoreCT={matchState.scoreCT}
               scoreT={matchState.scoreT}
-              mapName={matchState.mapName}
+              mapName={matchState.mapName || dbMatch?.map_name || ""}
               currentRound={matchState.currentRound}
               roundPhase={matchState.roundPhase}
             />
@@ -1774,7 +1761,7 @@ export default function MatchPage() {
               <MapsSection
                 teamCT={teamCTName}
                 teamT={teamTName}
-                currentMap={matchState?.mapName || ""}
+                currentMap={matchState?.mapName || dbMatch?.map_name || ""}
               />
             </div>
 
@@ -1811,7 +1798,7 @@ export default function MatchPage() {
                 scoreCT={matchState?.scoreCT || 0}
                 scoreT={matchState?.scoreT || 0}
                 currentRound={matchState?.currentRound || 1}
-                mapName={matchState?.mapName || ""}
+                mapName={matchState?.mapName || dbMatch?.map_name || ""}
                 roundPhase={matchState?.roundPhase || "live"}
                 roundTimeRemaining={matchState?.roundTimeRemaining}
               />
