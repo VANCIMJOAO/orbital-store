@@ -1,10 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RequireTournamentProfile } from "@/components/RequireTournamentProfile";
+import { TournamentHeader } from "@/components/TournamentHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+
+interface PlayerStats {
+  matches: number;
+  wins: number;
+  losses: number;
+  winrate: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  kd: string;
+  headshots: number;
+  hsPercentage: string;
+  totalDamage: number;
+  adr: string;
+  avgRating: string;
+  roundsPlayed: number;
+  firstKills: number;
+  firstDeaths: number;
+  fkFdDiff: number;
+  clutchWins: number;
+  clutchAttempts: number;
+  clutchRate: string;
+  aces: number;
+  fourKills: number;
+  threeKills: number;
+  twoKills: number;
+}
+
+interface MatchHistoryEntry {
+  matchId: string;
+  mapName: string;
+  date: string;
+  result: "win" | "loss";
+  score: string;
+  playerTeam: { id: string; name: string; tag: string; logo_url: string | null } | null;
+  opponentTeam: { id: string; name: string; tag: string; logo_url: string | null } | null;
+  stats: {
+    kills: number;
+    deaths: number;
+    assists: number;
+    rating: number | null;
+    adr: number | null;
+  };
+}
+
+interface PlayerTeam {
+  id: string;
+  name: string;
+  tag: string;
+  logo_url: string | null;
+}
 
 function PerfilContent() {
   const { profile, updateProfile, refreshProfile, signOut } = useAuth();
@@ -14,6 +66,32 @@ function PerfilContent() {
     discord_username: profile?.discord_username || "",
   });
   const [saving, setSaving] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [stats, setStats] = useState<PlayerStats | null>(null);
+  const [matchHistory, setMatchHistory] = useState<MatchHistoryEntry[]>([]);
+  const [team, setTeam] = useState<PlayerTeam | null>(null);
+
+  // Buscar stats reais da API
+  useEffect(() => {
+    async function fetchStats() {
+      if (!profile?.id) return;
+      setStatsLoading(true);
+      try {
+        const res = await fetch(`/api/profiles/${profile.id}/stats`);
+        if (res.ok) {
+          const data = await res.json();
+          setStats(data.stats);
+          setMatchHistory(data.matchHistory || []);
+          setTeam(data.team || null);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar stats:", err);
+      } finally {
+        setStatsLoading(false);
+      }
+    }
+    fetchStats();
+  }, [profile?.id]);
 
   // Calcular XP necessário para o próximo nível (1000 XP por nível)
   const xpPerLevel = 1000;
@@ -22,7 +100,6 @@ function PerfilContent() {
   const xpForCurrentLevel = currentXp % xpPerLevel;
   const xpProgress = (xpForCurrentLevel / xpPerLevel) * 100;
 
-  // Formatar data de criação
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "Data desconhecida";
     const date = new Date(dateString);
@@ -30,15 +107,17 @@ function PerfilContent() {
     return `${months[date.getMonth()]} ${date.getFullYear()}`;
   };
 
-  // Função para copiar link do perfil
+  const formatMatchDate = (dateString: string | null) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  };
+
   const handleShare = async () => {
     const profileUrl = `${window.location.origin}/campeonatos/jogador/${profile?.username}`;
-
     try {
       await navigator.clipboard.writeText(profileUrl);
       addToast("Link do perfil copiado!", "success");
     } catch {
-      // Fallback para navegadores que não suportam clipboard API
       const textArea = document.createElement("textarea");
       textArea.value = profileUrl;
       document.body.appendChild(textArea);
@@ -49,14 +128,11 @@ function PerfilContent() {
     }
   };
 
-  // Função para salvar edição
   const handleSaveEdit = async () => {
     setSaving(true);
-
     const { error } = await updateProfile({
       discord_username: editForm.discord_username || null,
     });
-
     if (error) {
       addToast("Erro ao salvar alterações", "error");
     } else {
@@ -64,124 +140,13 @@ function PerfilContent() {
       addToast("Perfil atualizado!", "success");
       setIsEditing(false);
     }
-
     setSaving(false);
-  };
-
-  // Estatísticas mock (futuro: buscar do banco)
-  const estatisticas = {
-    partidas: 0,
-    vitorias: 0,
-    derrotas: 0,
-    winrate: "0%",
-    kills: 0,
-    deaths: 0,
-    kd: "0.00",
-    hs: "0%",
-    adr: "0",
-    rating: "0.00",
   };
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0f0f15] border-b border-[#A855F7]/20">
-        <div className="h-full flex items-center justify-between px-6">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded bg-[#A855F7]/20 border border-[#A855F7]/50 flex items-center justify-center">
-              <span className="font-display text-[#A855F7] text-lg">O</span>
-            </div>
-            <span className="font-display text-[#F5F5DC] text-lg tracking-wider hidden sm:block">
-              ORBITAL ROXA
-            </span>
-          </Link>
+      <TournamentHeader />
 
-          {/* Navegação Central */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider">
-              INÍCIO
-            </Link>
-            <Link href="/campeonatos" className="font-mono text-xs text-[#A855F7] tracking-wider">
-              CAMPEONATOS
-            </Link>
-            <Link href="/store" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider">
-              LOJA
-            </Link>
-            <Link href="/comunidade" className="font-mono text-xs text-[#A1A1AA] hover:text-[#F5F5DC] transition-colors tracking-wider">
-              COMUNIDADE
-            </Link>
-          </nav>
-
-          {/* Área do Usuário */}
-          <div className="flex items-center gap-4">
-            {/* Notificações */}
-            <button className="relative p-2 hover:bg-[#27272A] rounded-lg transition-colors">
-              <svg className="w-5 h-5 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
-
-            {/* Divisor */}
-            <div className="w-px h-8 bg-[#27272A]" />
-
-            {/* Link Admin (se for admin) */}
-            {profile?.is_admin && (
-              <Link
-                href="/admin"
-                className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
-                title="Painel Admin"
-              >
-                <svg className="w-5 h-5 text-[#eab308]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </Link>
-            )}
-
-            {/* Avatar e Info do Usuário */}
-            <Link
-              href="/campeonatos/perfil"
-              className="flex items-center gap-3 cursor-pointer hover:bg-[#27272A] rounded-lg p-2 transition-colors"
-            >
-              <div className="text-right hidden sm:block">
-                <div className="flex items-center justify-end gap-2">
-                  <span className="text-xs font-body text-[#F5F5DC]">
-                    {profile?.username || "Usuário"}
-                  </span>
-                  {profile?.is_admin && (
-                    <span className="px-1.5 py-0.5 bg-[#eab308]/20 border border-[#eab308]/50 rounded text-[8px] font-mono text-[#eab308]">
-                      ADMIN
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-mono text-[#A855F7]">
-                  Nível {profile?.level || 1}
-                </span>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#A855F7] to-[#7C3AED] flex items-center justify-center border-2 border-[#A855F7]/50">
-                <span className="font-mono text-white text-sm font-bold">
-                  {(profile?.username?.[0] || "U").toUpperCase()}
-                </span>
-              </div>
-            </Link>
-
-            {/* Botão de Sair */}
-            <button
-              onClick={() => signOut()}
-              className="p-2 hover:bg-[#27272A] rounded-lg transition-colors"
-              title="Sair"
-            >
-              <svg className="w-5 h-5 text-[#A1A1AA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Conteúdo */}
       <main className="flex-1 pt-16">
         {/* Banner do Perfil */}
         <div className="relative h-48 bg-gradient-to-r from-[#A855F7]/20 via-[#1a1a2e] to-[#7C3AED]/20">
@@ -268,9 +233,7 @@ function PerfilContent() {
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
             <div className="bg-[#12121a] border border-[#27272A] rounded-2xl p-6 w-full max-w-md">
               <h2 className="font-display text-xl text-[#F5F5DC] mb-6">EDITAR PERFIL</h2>
-
               <div className="space-y-4">
-                {/* Username (readonly) */}
                 <div>
                   <label className="block text-xs font-mono text-[#A1A1AA] mb-2">NOME DE USUÁRIO</label>
                   <div className="bg-[#1a1a2e]/50 border border-[#27272A] rounded-lg px-4 py-3 text-[#A1A1AA]">
@@ -278,16 +241,12 @@ function PerfilContent() {
                   </div>
                   <p className="text-[10px] text-[#52525B] mt-1">O nome de usuário não pode ser alterado</p>
                 </div>
-
-                {/* Steam ID (readonly) */}
                 <div>
                   <label className="block text-xs font-mono text-[#A1A1AA] mb-2">STEAM ID</label>
                   <div className="bg-[#1a1a2e]/50 border border-[#27272A] rounded-lg px-4 py-3 text-[#A1A1AA]">
                     {profile?.steam_id}
                   </div>
                 </div>
-
-                {/* Discord */}
                 <div>
                   <label className="block text-xs font-mono text-[#A1A1AA] mb-2">DISCORD</label>
                   <input
@@ -299,7 +258,6 @@ function PerfilContent() {
                   />
                 </div>
               </div>
-
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setIsEditing(false)}
@@ -324,68 +282,148 @@ function PerfilContent() {
           {/* Coluna Esquerda - Estatísticas */}
           <div className="lg:col-span-2 space-y-6">
             {/* Cards de Stats Principais */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
-                <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">PARTIDAS</span>
-                <span className="font-display text-2xl text-[#F5F5DC]">{estatisticas.partidas}</span>
+            {statsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 rounded-full border-2 border-[#A855F7]/20 border-t-[#A855F7] animate-spin" />
               </div>
-              <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
-                <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">WINRATE</span>
-                <span className="font-display text-2xl text-[#22c55e]">{estatisticas.winrate}</span>
-              </div>
-              <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
-                <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">K/D</span>
-                <span className="font-display text-2xl text-[#A855F7]">{estatisticas.kd}</span>
-              </div>
-              <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
-                <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">RATING</span>
-                <span className="font-display text-2xl text-[#F5F5DC]">{estatisticas.rating}</span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
+                    <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">PARTIDAS</span>
+                    <span className="font-display text-2xl text-[#F5F5DC]">{stats?.matches || 0}</span>
+                  </div>
+                  <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
+                    <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">WINRATE</span>
+                    <span className={`font-display text-2xl ${
+                      parseFloat(stats?.winrate || "0") >= 50 ? "text-[#22c55e]" : "text-[#eab308]"
+                    }`}>{stats?.winrate || "0%"}</span>
+                  </div>
+                  <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
+                    <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">K/D</span>
+                    <span className={`font-display text-2xl ${
+                      parseFloat(stats?.kd || "0") >= 1 ? "text-[#22c55e]" : "text-[#ef4444]"
+                    }`}>{stats?.kd || "0.00"}</span>
+                  </div>
+                  <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
+                    <span className="text-[10px] font-mono text-[#A1A1AA] block mb-1">RATING</span>
+                    <span className={`font-display text-2xl ${
+                      parseFloat(stats?.avgRating || "0") >= 1 ? "text-[#22c55e]" : "text-[#F5F5DC]"
+                    }`}>{stats?.avgRating || "0.00"}</span>
+                  </div>
+                </div>
 
-            {/* Estatísticas Detalhadas */}
-            <div className="bg-[#12121a] border border-[#27272A] rounded-lg">
-              <div className="p-4 border-b border-[#27272A]">
-                <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">ESTATÍSTICAS DETALHADAS</h3>
-              </div>
-              <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
-                  <span className="text-xs text-[#A1A1AA]">Vitórias</span>
-                  <span className="font-mono text-sm text-[#22c55e]">{estatisticas.vitorias}</span>
+                {/* Estatísticas Detalhadas */}
+                <div className="bg-[#12121a] border border-[#27272A] rounded-lg">
+                  <div className="p-4 border-b border-[#27272A]">
+                    <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">ESTATÍSTICAS DETALHADAS</h3>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">Vitórias</span>
+                      <span className="font-mono text-sm text-[#22c55e]">{stats?.wins || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">Derrotas</span>
+                      <span className="font-mono text-sm text-[#eab308]">{stats?.losses || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">Kills</span>
+                      <span className="font-mono text-sm text-[#F5F5DC]">{stats?.kills || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">Deaths</span>
+                      <span className="font-mono text-sm text-[#F5F5DC]">{stats?.deaths || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">Assists</span>
+                      <span className="font-mono text-sm text-[#F5F5DC]">{stats?.assists || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">HS%</span>
+                      <span className="font-mono text-sm text-[#A855F7]">{stats?.hsPercentage || "0%"}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">ADR</span>
+                      <span className="font-mono text-sm text-[#F5F5DC]">{stats?.adr || "0"}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">First Kills</span>
+                      <span className="font-mono text-sm text-[#22c55e]">{stats?.firstKills || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
+                      <span className="text-xs text-[#A1A1AA]">Clutch Rate</span>
+                      <span className="font-mono text-sm text-[#A855F7]">{stats?.clutchRate || "0%"}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
-                  <span className="text-xs text-[#A1A1AA]">Derrotas</span>
-                  <span className="font-mono text-sm text-[#eab308]">{estatisticas.derrotas}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
-                  <span className="text-xs text-[#A1A1AA]">Kills</span>
-                  <span className="font-mono text-sm text-[#F5F5DC]">{estatisticas.kills}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
-                  <span className="text-xs text-[#A1A1AA]">Deaths</span>
-                  <span className="font-mono text-sm text-[#F5F5DC]">{estatisticas.deaths}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
-                  <span className="text-xs text-[#A1A1AA]">HS%</span>
-                  <span className="font-mono text-sm text-[#A855F7]">{estatisticas.hs}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-[#27272A]">
-                  <span className="text-xs text-[#A1A1AA]">ADR</span>
-                  <span className="font-mono text-sm text-[#F5F5DC]">{estatisticas.adr}</span>
-                </div>
-              </div>
-            </div>
 
-            {/* Histórico de Partidas */}
-            <div className="bg-[#12121a] border border-[#27272A] rounded-lg">
-              <div className="p-4 border-b border-[#27272A] flex items-center justify-between">
-                <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">HISTÓRICO DE PARTIDAS</h3>
-              </div>
-              <div className="p-8 text-center">
-                <p className="text-[#A1A1AA] text-sm">Nenhuma partida registrada ainda</p>
-                <p className="text-[#52525B] text-xs mt-1">Participe de campeonatos para ver seu histórico aqui</p>
-              </div>
-            </div>
+                {/* Histórico de Partidas */}
+                <div className="bg-[#12121a] border border-[#27272A] rounded-lg">
+                  <div className="p-4 border-b border-[#27272A]">
+                    <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">HISTÓRICO DE PARTIDAS</h3>
+                  </div>
+                  {matchHistory.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="text-[#A1A1AA] text-sm">Nenhuma partida registrada ainda</p>
+                      <p className="text-[#52525B] text-xs mt-1">Participe de campeonatos para ver seu histórico aqui</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#27272A]">
+                      {matchHistory.map((match) => (
+                        <Link
+                          key={match.matchId}
+                          href={`/campeonatos/partida/${match.matchId}`}
+                          className="flex items-center gap-4 p-4 hover:bg-[#1a1a2e] transition-colors"
+                        >
+                          {/* Resultado */}
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-mono text-xs font-bold ${
+                            match.result === "win"
+                              ? "bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/30"
+                              : "bg-[#ef4444]/20 text-[#ef4444] border border-[#ef4444]/30"
+                          }`}>
+                            {match.result === "win" ? "W" : "L"}
+                          </div>
+
+                          {/* Info da Partida */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm text-[#F5F5DC] font-body truncate">
+                                vs {match.opponentTeam?.name || "TBD"}
+                              </span>
+                              <span className="text-xs font-mono text-[#A1A1AA]">{match.score}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] font-mono text-[#52525B]">
+                              <span>{match.mapName || "Mapa"}</span>
+                              <span>-</span>
+                              <span>{formatMatchDate(match.date)}</span>
+                            </div>
+                          </div>
+
+                          {/* Stats do jogador nessa partida */}
+                          <div className="flex items-center gap-4 text-xs font-mono">
+                            <div className="text-center">
+                              <span className="text-[#22c55e]">{match.stats.kills}</span>
+                              <span className="text-[#52525B]">/</span>
+                              <span className="text-[#ef4444]">{match.stats.deaths}</span>
+                              <span className="text-[#52525B]">/</span>
+                              <span className="text-[#A1A1AA]">{match.stats.assists}</span>
+                            </div>
+                            {match.stats.rating && (
+                              <span className={`font-bold ${
+                                Number(match.stats.rating) >= 1 ? "text-[#22c55e]" : "text-[#ef4444]"
+                              }`}>
+                                {Number(match.stats.rating).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Coluna Direita */}
@@ -428,26 +466,60 @@ function PerfilContent() {
               </div>
             </div>
 
-            {/* Conquistas */}
-            <div className="bg-[#12121a] border border-[#27272A] rounded-lg">
-              <div className="p-4 border-b border-[#27272A] flex items-center justify-between">
-                <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">CONQUISTAS</h3>
-                <span className="text-xs font-mono text-[#A855F7]">0/20</span>
-              </div>
-              <div className="p-8 text-center">
-                <p className="text-[#A1A1AA] text-sm">Nenhuma conquista ainda</p>
-                <p className="text-[#52525B] text-xs mt-1">Jogue para desbloquear conquistas</p>
-              </div>
-            </div>
-
             {/* Time Atual */}
             <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
               <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider mb-4">TIME ATUAL</h3>
-              <div className="text-center py-4">
-                <p className="text-[#A1A1AA] text-sm">Sem time</p>
-                <p className="text-[#52525B] text-xs mt-1">Junte-se a um time para competir</p>
-              </div>
+              {team ? (
+                <Link
+                  href={`/campeonatos/time/${team.id}`}
+                  className="flex items-center gap-3 p-3 bg-[#1a1a2e] rounded-lg hover:bg-[#27272A] transition-colors"
+                >
+                  <div className="w-12 h-12 rounded-lg bg-[#27272A] border border-[#A855F7]/30 flex items-center justify-center overflow-hidden">
+                    {team.logo_url ? (
+                      <img src={team.logo_url} alt={team.name} className="w-10 h-10 object-contain" />
+                    ) : (
+                      <span className="text-xs font-mono text-[#A1A1AA]">{team.tag}</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-sm font-body text-[#F5F5DC] block">{team.name}</span>
+                    <span className="text-[10px] font-mono text-[#A1A1AA]">{team.tag}</span>
+                  </div>
+                </Link>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-[#A1A1AA] text-sm">Sem time</p>
+                  <p className="text-[#52525B] text-xs mt-1">Junte-se a um time para competir</p>
+                </div>
+              )}
             </div>
+
+            {/* Multi-kills */}
+            {stats && (stats.aces > 0 || stats.fourKills > 0 || stats.threeKills > 0) && (
+              <div className="bg-[#12121a] border border-[#27272A] rounded-lg p-4">
+                <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider mb-4">MULTI-KILLS</h3>
+                <div className="space-y-2">
+                  {stats.aces > 0 && (
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-xs text-[#A1A1AA]">Aces (5K)</span>
+                      <span className="font-mono text-sm text-[#FFD700] font-bold">{stats.aces}</span>
+                    </div>
+                  )}
+                  {stats.fourKills > 0 && (
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-xs text-[#A1A1AA]">4K</span>
+                      <span className="font-mono text-sm text-[#A855F7]">{stats.fourKills}</span>
+                    </div>
+                  )}
+                  {stats.threeKills > 0 && (
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-xs text-[#A1A1AA]">3K</span>
+                      <span className="font-mono text-sm text-[#F5F5DC]">{stats.threeKills}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
