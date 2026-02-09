@@ -7,6 +7,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import {
   CS2_MAP_POOL,
   MAP_DISPLAY_NAMES,
+  MAP_COLORS,
   VETO_SEQUENCE_BO1,
   VETO_SEQUENCE_BO3,
   type VetoStep,
@@ -76,15 +77,15 @@ const roundNames: Record<string, string> = {
   grand_final: "GRAND FINAL",
 };
 
-// Imagens de mapas para o veto visual
-const mapImages: Record<string, string> = {
-  de_mirage: "/maps/mirage.jpg",
-  de_inferno: "/maps/inferno.jpg",
-  de_ancient: "/maps/ancient.jpg",
-  de_nuke: "/maps/nuke.jpg",
-  de_anubis: "/maps/anubis.jpg",
-  de_vertigo: "/maps/vertigo.jpg",
-  de_dust2: "/maps/dust2.jpg",
+// Icone SVG simples por mapa (silhouette style)
+const mapIcons: Record<string, string> = {
+  de_mirage: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+  de_ancient: "M12 2L2 12h3v8h6v-6h2v6h6v-8h3L12 2z",
+  de_inferno: "M12 2C8 2 4.5 5.5 4.5 9.5c0 5.5 7.5 12.5 7.5 12.5s7.5-7 7.5-12.5C19.5 5.5 16 2 12 2z",
+  de_nuke: "M12 2l-2 4-4 1 3 3-1 4 4-2 4 2-1-4 3-3-4-1z",
+  de_overpass: "M3 12h4l3-9 4 18 3-9h4",
+  de_anubis: "M12 2l-8 4v6c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V6l-8-4z",
+  de_dust2: "M17.5 2H6.5L2 7v10l4.5 5h11l4.5-5V7L17.5 2z",
 };
 
 export default function PartidaDetalhes() {
@@ -803,49 +804,66 @@ export default function PartidaDetalhes() {
 
       {/* Veto Section */}
       {showVetoSection && (
-        <div className="bg-[#12121a] border border-[#27272A] rounded-xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-mono text-sm text-[#A855F7] tracking-wider">
-              VETO DE MAPAS
-            </h3>
-            {vetoCompleted && (
-              <span className="px-3 py-1 bg-[#22c55e]/20 text-[#22c55e] text-xs font-mono rounded">
-                COMPLETO
+        <div className="bg-[#12121a] border border-[#27272A] rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#27272A]">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-6 bg-[#A855F7] rounded-full" />
+              <h3 className="font-mono text-sm text-[#F5F5DC] tracking-wider">
+                MAP VETO
+              </h3>
+              <span className="text-xs text-[#52525B] font-mono">
+                {match.best_of >= 3 ? "BO3" : "BO1"}
               </span>
+            </div>
+            {vetoCompleted && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-[#22c55e]/10 border border-[#22c55e]/30 rounded-full">
+                <svg className="w-3.5 h-3.5 text-[#22c55e]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                </svg>
+                <span className="text-[#22c55e] text-xs font-mono">COMPLETO</span>
+              </div>
             )}
           </div>
 
           {/* Escolha de quem começa */}
           {!vetoStarted && (
-            <div className="space-y-4">
-              <p className="text-sm text-[#A1A1AA]">
-                Quem começa vetando? (definido por par/impar com os capitaes)
-              </p>
-              <div className="flex gap-4">
+            <div className="p-6 space-y-5">
+              <div className="text-center space-y-1">
+                <p className="text-sm text-[#F5F5DC]">Quem começa vetando?</p>
+                <p className="text-xs text-[#52525B]">Definido por par/impar com os capitaes</p>
+              </div>
+              <div className="flex gap-3">
                 <button
                   onClick={() => setVetoFirstTeam("team1")}
-                  className={`flex-1 px-4 py-3 rounded-lg font-mono text-sm transition-colors border ${
+                  className={`flex-1 px-4 py-4 rounded-xl font-mono text-sm transition-all border-2 ${
                     vetoFirstTeam === "team1"
-                      ? "bg-[#A855F7]/20 border-[#A855F7] text-[#A855F7]"
-                      : "bg-[#1a1a2e] border-[#27272A] text-[#A1A1AA] hover:border-[#3f3f46]"
+                      ? "bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6] shadow-[0_0_20px_rgba(59,130,246,0.15)]"
+                      : "bg-[#0f0f15] border-[#27272A] text-[#A1A1AA] hover:border-[#3f3f46]"
                   }`}
                 >
-                  {team1Name}
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-lg">{team1Tag}</span>
+                    <span className="text-[10px] opacity-60">{team1Name}</span>
+                  </div>
                 </button>
                 <button
                   onClick={() => setVetoFirstTeam("team2")}
-                  className={`flex-1 px-4 py-3 rounded-lg font-mono text-sm transition-colors border ${
+                  className={`flex-1 px-4 py-4 rounded-xl font-mono text-sm transition-all border-2 ${
                     vetoFirstTeam === "team2"
-                      ? "bg-[#A855F7]/20 border-[#A855F7] text-[#A855F7]"
-                      : "bg-[#1a1a2e] border-[#27272A] text-[#A1A1AA] hover:border-[#3f3f46]"
+                      ? "bg-[#f59e0b]/10 border-[#f59e0b] text-[#f59e0b] shadow-[0_0_20px_rgba(245,158,11,0.15)]"
+                      : "bg-[#0f0f15] border-[#27272A] text-[#A1A1AA] hover:border-[#3f3f46]"
                   }`}
                 >
-                  {team2Name}
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-lg">{team2Tag}</span>
+                    <span className="text-[10px] opacity-60">{team2Name}</span>
+                  </div>
                 </button>
               </div>
               <button
                 onClick={() => setVetoStarted(true)}
-                className="w-full px-4 py-3 bg-[#A855F7] hover:bg-[#9333EA] text-white font-mono text-sm rounded-lg transition-colors"
+                className="w-full px-4 py-3.5 bg-[#A855F7] hover:bg-[#9333EA] text-white font-mono text-sm rounded-xl transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]"
               >
                 INICIAR VETO
               </button>
@@ -854,121 +872,151 @@ export default function PartidaDetalhes() {
 
           {/* Veto em andamento */}
           {vetoStarted && (
-            <div className="space-y-6">
+            <div className="space-y-0">
               {/* Indicador de turno */}
               {!vetoCompleted && (
-                <div className="flex items-center justify-center gap-3 py-3 bg-[#1a1a2e] rounded-lg">
-                  <div className={`w-3 h-3 rounded-full ${getCurrentActor() === "team1" ? "bg-[#3b82f6]" : "bg-[#f59e0b]"}`} />
-                  <span className="font-mono text-sm text-[#F5F5DC]">
-                    {getCurrentActor() === "team1" ? team1Name : team2Name}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-mono ${
-                    getCurrentAction() === "ban"
-                      ? "bg-[#ef4444]/20 text-[#ef4444]"
-                      : "bg-[#22c55e]/20 text-[#22c55e]"
-                  }`}>
-                    {getCurrentAction() === "ban" ? "BAN" : "PICK"}
-                  </span>
+                <div className="px-6 py-3 bg-[#0f0f15] border-b border-[#27272A]">
+                  <div className="flex items-center justify-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${getCurrentActor() === "team1" ? "bg-[#3b82f6]" : "bg-[#f59e0b]"}`} />
+                    <span className={`font-mono text-sm font-bold ${getCurrentActor() === "team1" ? "text-[#3b82f6]" : "text-[#f59e0b]"}`}>
+                      {getCurrentActor() === "team1" ? team1Name : team2Name}
+                    </span>
+                    <span className="text-[#52525B]">deve</span>
+                    <span className={`px-3 py-1 rounded-md text-xs font-mono font-bold tracking-wider ${
+                      getCurrentAction() === "ban"
+                        ? "bg-[#ef4444] text-white"
+                        : "bg-[#22c55e] text-white"
+                    }`}>
+                      {getCurrentAction() === "ban" ? "BANIR" : "ESCOLHER"}
+                    </span>
+                  </div>
                 </div>
               )}
 
-              {/* Grid de mapas */}
-              <div className="grid grid-cols-4 gap-3">
-                {CS2_MAP_POOL.map((map) => {
-                  const step = vetoSteps.find((s) => s.map === map);
-                  const isUsed = !!step;
-                  const isBanned = step?.action === "ban";
-                  const isPicked = step?.action === "pick";
-                  const isLeftover = step?.action === "leftover";
-                  const stepTeamName = step?.team === "team1" ? team1Tag : step?.team === "team2" ? team2Tag : "";
+              {/* Grid de mapas estilo ESL - horizontal */}
+              <div className="p-4">
+                <div className="grid grid-cols-7 gap-2">
+                  {CS2_MAP_POOL.map((map) => {
+                    const step = vetoSteps.find((s) => s.map === map);
+                    const isUsed = !!step;
+                    const isBanned = step?.action === "ban";
+                    const isPicked = step?.action === "pick";
+                    const isLeftover = step?.action === "leftover";
+                    const stepTeamName = step?.team === "team1" ? team1Tag : step?.team === "team2" ? team2Tag : "";
+                    const colors = MAP_COLORS[map] || MAP_COLORS.de_dust2;
 
-                  return (
-                    <button
-                      key={map}
-                      onClick={() => !isUsed && !vetoCompleted && handleMapClick(map)}
-                      disabled={isUsed || vetoCompleted}
-                      className={`relative group rounded-xl overflow-hidden border-2 transition-all ${
-                        isPicked || isLeftover
-                          ? "border-[#22c55e] ring-1 ring-[#22c55e]/30"
-                          : isBanned
-                          ? "border-[#ef4444]/30 opacity-40"
-                          : "border-[#27272A] hover:border-[#A855F7]/50 hover:scale-[1.02]"
-                      } ${isUsed || vetoCompleted ? "cursor-default" : "cursor-pointer"}`}
-                    >
-                      {/* Map background */}
-                      <div className="aspect-[16/10] bg-[#1a1a2e] flex items-center justify-center">
-                        <span className="font-display text-lg text-[#F5F5DC]/60">
-                          {MAP_DISPLAY_NAMES[map] || map}
-                        </span>
-                      </div>
+                    return (
+                      <button
+                        key={map}
+                        onClick={() => !isUsed && !vetoCompleted && handleMapClick(map)}
+                        disabled={isUsed || vetoCompleted}
+                        className={`relative group rounded-lg overflow-hidden transition-all duration-200 ${
+                          isUsed || vetoCompleted ? "cursor-default" : "cursor-pointer hover:scale-[1.03] hover:z-10"
+                        } ${isBanned ? "opacity-50 grayscale" : ""}`}
+                      >
+                        {/* Action label no topo */}
+                        {step && (
+                          <div className={`text-[10px] font-mono font-bold tracking-wider text-center py-1.5 ${
+                            isBanned
+                              ? "bg-[#ef4444] text-white"
+                              : isPicked
+                              ? "bg-[#22c55e] text-white"
+                              : "bg-[#3b82f6] text-white"
+                          }`}>
+                            {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
+                          </div>
+                        )}
+                        {!step && !vetoCompleted && (
+                          <div className="text-[10px] font-mono tracking-wider text-center py-1.5 bg-[#27272A]/80 text-[#52525B] group-hover:bg-[#A855F7] group-hover:text-white transition-colors">
+                            {getCurrentAction() === "ban" ? "BAN" : "PICK"}
+                          </div>
+                        )}
+                        {!step && vetoCompleted && (
+                          <div className="text-[10px] font-mono tracking-wider text-center py-1.5 bg-[#27272A]/80 text-[#52525B]">
+                            -
+                          </div>
+                        )}
 
-                      {/* Map name bar */}
-                      <div className={`px-3 py-2 ${
-                        isPicked || isLeftover
-                          ? "bg-[#22c55e]/10"
-                          : isBanned
-                          ? "bg-[#ef4444]/10"
-                          : "bg-[#0f0f15]"
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs text-[#F5F5DC]">
-                            {MAP_DISPLAY_NAMES[map] || map}
+                        {/* Map card body */}
+                        <div
+                          className="aspect-[3/4] flex flex-col items-center justify-center relative"
+                          style={{
+                            background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
+                          }}
+                        >
+                          {/* Map icon */}
+                          <svg
+                            className="w-8 h-8 mb-2"
+                            style={{ color: isBanned ? '#52525B' : colors.accent }}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d={mapIcons[map] || mapIcons.de_dust2} />
+                          </svg>
+
+                          {/* Map name */}
+                          <span className={`font-display text-sm tracking-wide ${isBanned ? "text-[#52525B]" : "text-[#F5F5DC]"}`}>
+                            {MAP_DISPLAY_NAMES[map]}
                           </span>
-                          {step && (
-                            <span className={`text-[10px] font-mono ${
-                              isBanned ? "text-[#ef4444]" : "text-[#22c55e]"
+
+                          {/* Team tag quem baniu/picou */}
+                          {stepTeamName && (
+                            <span className={`text-[9px] font-mono mt-1 ${
+                              isBanned ? "text-[#ef4444]/60" : "text-[#22c55e]/80"
                             }`}>
-                              {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
-                              {stepTeamName && ` (${stepTeamName})`}
+                              {stepTeamName}
                             </span>
                           )}
-                        </div>
-                      </div>
 
-                      {/* Overlay ban X */}
-                      {isBanned && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <svg className="w-16 h-16 text-[#ef4444]/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </div>
-                      )}
+                          {/* Ban X overlay */}
+                          {isBanned && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <svg className="w-14 h-14 text-[#ef4444]/40" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </div>
+                          )}
 
-                      {/* Overlay pick check */}
-                      {(isPicked || isLeftover) && (
-                        <div className="absolute top-2 right-2">
-                          <svg className="w-6 h-6 text-[#22c55e]" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                          </svg>
+                          {/* Hover glow para mapas disponíveis */}
+                          {!isUsed && !vetoCompleted && (
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                              style={{
+                                background: `radial-gradient(circle at center, ${colors.accent}20, transparent 70%)`,
+                              }}
+                            />
+                          )}
                         </div>
-                      )}
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Historico do veto */}
+              {/* Historico do veto - timeline style */}
               {vetoSteps.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="font-mono text-xs text-[#52525B] tracking-wider">HISTORICO</h4>
-                  <div className="flex flex-wrap gap-2">
+                <div className="px-6 py-4 bg-[#0a0a12] border-t border-[#27272A]">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                     {vetoSteps.map((step, i) => (
                       <div
                         key={i}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono ${
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-mono shrink-0 ${
                           step.action === "ban"
-                            ? "bg-[#ef4444]/10 text-[#ef4444]"
+                            ? "bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20"
                             : step.action === "pick"
-                            ? "bg-[#22c55e]/10 text-[#22c55e]"
-                            : "bg-[#3b82f6]/10 text-[#3b82f6]"
+                            ? "bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20"
+                            : "bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20"
                         }`}
                       >
-                        <span>{step.order}.</span>
-                        <span>
+                        <span className="opacity-50">{step.order}.</span>
+                        <span className="font-bold">
                           {step.team === "team1" ? team1Tag : step.team === "team2" ? team2Tag : "-"}
                         </span>
-                        <span className="uppercase">{step.action === "leftover" ? "DECIDER" : step.action}</span>
-                        <span className="text-[#F5F5DC]">{MAP_DISPLAY_NAMES[step.map] || step.map}</span>
+                        <span className="uppercase text-[10px]">{step.action === "leftover" ? "DEC" : step.action}</span>
+                        <span className="text-[#F5F5DC]/80">{MAP_DISPLAY_NAMES[step.map]}</span>
                       </div>
                     ))}
                   </div>
@@ -976,23 +1024,29 @@ export default function PartidaDetalhes() {
               )}
 
               {/* Controles do veto */}
-              <div className="flex gap-3">
+              <div className="px-6 py-3 border-t border-[#27272A] flex items-center gap-3">
                 {!vetoCompleted && vetoSteps.length > 0 && (
                   <button
                     onClick={handleVetoUndo}
-                    className="px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] font-mono text-xs rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] font-mono text-xs rounded-lg transition-colors"
                   >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
                     DESFAZER
                   </button>
                 )}
                 <button
                   onClick={handleVetoReset}
-                  className="px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] font-mono text-xs rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] font-mono text-xs rounded-lg transition-colors"
                 >
-                  RESETAR VETO
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  RESETAR
                 </button>
                 {vetoSaving && (
-                  <div className="flex items-center gap-2 px-4 py-2 text-[#A855F7] text-xs font-mono">
+                  <div className="flex items-center gap-2 ml-auto text-[#A855F7] text-xs font-mono">
                     <div className="w-4 h-4 border-2 border-[#A855F7] border-t-transparent rounded-full animate-spin" />
                     Salvando e carregando no servidor...
                   </div>
@@ -1003,30 +1057,47 @@ export default function PartidaDetalhes() {
 
           {/* Resumo do veto (se ja foi feito e carregado do banco) */}
           {hasVetoData && !vetoStarted && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {(match.veto_data as VetoData).steps.map((step, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono ${
-                      step.action === "ban"
-                        ? "bg-[#ef4444]/10 text-[#ef4444]"
-                        : step.action === "pick"
-                        ? "bg-[#22c55e]/10 text-[#22c55e]"
-                        : "bg-[#3b82f6]/10 text-[#3b82f6]"
-                    }`}
-                  >
-                    <span>{step.order}.</span>
-                    <span>
-                      {step.team === "team1" ? team1Tag : step.team === "team2" ? team2Tag : "-"}
-                    </span>
-                    <span className="uppercase">{step.action === "leftover" ? "DECIDER" : step.action}</span>
-                    <span className="text-[#F5F5DC]">{MAP_DISPLAY_NAMES[step.map] || step.map}</span>
-                  </div>
-                ))}
+            <div className="p-4">
+              <div className="grid grid-cols-7 gap-2">
+                {(match.veto_data as VetoData).steps.map((step, i) => {
+                  const colors = MAP_COLORS[step.map] || MAP_COLORS.de_dust2;
+                  const isBanned = step.action === "ban";
+                  const isPicked = step.action === "pick";
+
+                  return (
+                    <div key={i} className={`rounded-lg overflow-hidden ${isBanned ? "opacity-50 grayscale" : ""}`}>
+                      <div className={`text-[10px] font-mono font-bold tracking-wider text-center py-1.5 ${
+                        isBanned ? "bg-[#ef4444] text-white" : isPicked ? "bg-[#22c55e] text-white" : "bg-[#3b82f6] text-white"
+                      }`}>
+                        {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
+                      </div>
+                      <div
+                        className="aspect-[3/4] flex flex-col items-center justify-center relative"
+                        style={{ background: `linear-gradient(135deg, ${colors.from}, ${colors.to})` }}
+                      >
+                        <svg className="w-7 h-7 mb-1.5" style={{ color: isBanned ? '#52525B' : colors.accent }} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                          <path d={mapIcons[step.map] || mapIcons.de_dust2} />
+                        </svg>
+                        <span className={`font-display text-xs ${isBanned ? "text-[#52525B]" : "text-[#F5F5DC]"}`}>
+                          {MAP_DISPLAY_NAMES[step.map]}
+                        </span>
+                        <span className="text-[9px] font-mono mt-0.5 text-[#A1A1AA]/60">
+                          {step.team === "team1" ? team1Tag : step.team === "team2" ? team2Tag : ""}
+                        </span>
+                        {isBanned && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <svg className="w-12 h-12 text-[#ef4444]/40" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-xs text-[#A1A1AA]">
-                Mapas: {(match.veto_data as VetoData).maps.map(m => MAP_DISPLAY_NAMES[m] || m).join(", ")}
+              <p className="text-xs text-[#A1A1AA] mt-3 text-center">
+                Mapas: {(match.veto_data as VetoData).maps.map(m => MAP_DISPLAY_NAMES[m] || m).join(" / ")}
               </p>
             </div>
           )}

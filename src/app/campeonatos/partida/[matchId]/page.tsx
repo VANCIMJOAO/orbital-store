@@ -7,7 +7,7 @@ import { useGOTV } from "@/hooks/useGOTV";
 import { supabase } from "@/lib/supabase";
 import { TournamentHeader } from "@/components/TournamentHeader";
 import type { GOTVPlayerState, GameLogEvent } from "@/lib/gotv/types";
-import { MAP_DISPLAY_NAMES } from "@/lib/constants";
+import { MAP_DISPLAY_NAMES, MAP_COLORS } from "@/lib/constants";
 
 // Tipo para dados do Supabase (pré-match)
 interface SupabaseMatchData {
@@ -863,22 +863,16 @@ function MapsSection({
   if (!vetoData || !vetoData.completed) {
     return (
       <div className="bg-[#12121a] border border-[#27272A] rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-[#27272A]">
+        <div className="px-4 py-3 border-b border-[#27272A] flex items-center justify-between">
           <h3 className="font-mono text-sm text-[#F5F5DC]">MAPS</h3>
-          <span className="text-xs text-[#A1A1AA]">MD{bestOf || 1}</span>
+          <span className="text-xs text-[#52525B] font-mono">{bestOf >= 3 ? "BO3" : "BO1"}</span>
         </div>
-        <div className="p-4">
+        <div className="p-6">
           <p className="text-xs text-[#52525B] text-center">Aguardando veto...</p>
         </div>
       </div>
     );
   }
-
-  const getTeamName = (team: string) => {
-    if (team === "team1") return team1Name;
-    if (team === "team2") return team2Name;
-    return "-";
-  };
 
   const getTeamColor = (team: string) => {
     if (team === "team1") return "text-[#3b82f6]";
@@ -886,75 +880,92 @@ function MapsSection({
     return "text-[#A1A1AA]";
   };
 
+  const getTeamName = (team: string) => {
+    if (team === "team1") return team1Name;
+    if (team === "team2") return team2Name;
+    return "-";
+  };
+
   return (
     <div className="bg-[#12121a] border border-[#27272A] rounded-lg overflow-hidden">
-      <div className="p-4 border-b border-[#27272A]">
+      <div className="px-4 py-3 border-b border-[#27272A] flex items-center justify-between">
         <h3 className="font-mono text-sm text-[#F5F5DC]">MAPS</h3>
-        <span className="text-xs text-[#A1A1AA]">MD{bestOf || 1}</span>
+        <span className="text-xs text-[#52525B] font-mono">{bestOf >= 3 ? "BO3" : "BO1"}</span>
       </div>
 
-      {/* Veto de mapas */}
-      <div className="p-4 border-b border-[#27272A] space-y-1.5">
-        {vetoData.steps.map((step, index) => (
-          <div key={index} className="text-xs font-mono">
-            <span className="text-[#A1A1AA]">{step.order}. </span>
-            <span className={getTeamColor(step.team)}>
-              {getTeamName(step.team)}
-            </span>
-            <span className={`ml-1 ${
-              step.action === 'pick' ? 'text-green-500' :
-              step.action === 'ban' ? 'text-red-500' :
-              'text-[#3b82f6]'
-            }`}>
-              {step.action === 'ban' ? 'removed' : step.action === 'pick' ? 'picked' : 'leftover'}
-            </span>
-            <span className="text-[#F5F5DC] ml-1">{MAP_DISPLAY_NAMES[step.map] || step.map}</span>
-          </div>
-        ))}
+      {/* Veto cards estilo ESL - horizontal */}
+      <div className="p-3">
+        <div className="grid grid-cols-7 gap-1.5">
+          {vetoData.steps.map((step, index) => {
+            const isBanned = step.action === "ban";
+            const isPicked = step.action === "pick";
+            const colors = MAP_COLORS[step.map] || { from: "#1a1a2e", to: "#0f0f15", accent: "#A1A1AA" };
+
+            return (
+              <div key={index} className={`rounded overflow-hidden ${isBanned ? "opacity-45 grayscale" : ""}`}>
+                {/* Action label */}
+                <div className={`text-[8px] font-mono font-bold tracking-wider text-center py-1 ${
+                  isBanned ? "bg-[#ef4444] text-white" : isPicked ? "bg-[#22c55e] text-white" : "bg-[#3b82f6] text-white"
+                }`}>
+                  {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
+                </div>
+                {/* Map body */}
+                <div
+                  className="py-3 flex flex-col items-center justify-center"
+                  style={{ background: `linear-gradient(135deg, ${colors.from}, ${colors.to})` }}
+                >
+                  <span className={`font-display text-[11px] ${isBanned ? "text-[#52525B] line-through" : "text-[#F5F5DC]"}`}>
+                    {MAP_DISPLAY_NAMES[step.map] || step.map}
+                  </span>
+                  <span className={`text-[8px] font-mono mt-0.5 ${getTeamColor(step.team)}`}>
+                    {getTeamName(step.team)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Mapas da série */}
-      <div className="divide-y divide-[#27272A]">
+      {/* Mapas da série (com destaque) */}
+      <div className="border-t border-[#27272A]">
         {vetoData.maps.map((map, index) => {
-          const isCurrentMap = (MAP_DISPLAY_NAMES[map] || map) === (MAP_DISPLAY_NAMES[currentMap] || currentMap) ||
-            map === currentMap;
-          const isLive = isCurrentMap && index === 0; // Simplificado - primeiro mapa ativo
-
-          // Descobrir quem picou este mapa
+          const isCurrentMap = map === currentMap || (MAP_DISPLAY_NAMES[map] || map) === (MAP_DISPLAY_NAMES[currentMap] || currentMap);
+          const isLive = isCurrentMap;
           const pickStep = vetoData.steps.find(s => s.map === map);
-          const picker = pickStep ? pickStep.team : "-";
+          const colors = MAP_COLORS[map] || { from: "#1a1a2e", to: "#0f0f15", accent: "#A1A1AA" };
 
           return (
-            <div key={index} className={`p-3 ${isLive ? 'bg-[#A855F7]/10' : ''}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`h-1 w-8 rounded ${isLive ? 'bg-[#A855F7]' : 'bg-[#27272A]'}`} />
-                <span className="font-display text-sm text-[#F5F5DC]">
-                  {MAP_DISPLAY_NAMES[map] || map}
-                </span>
-                {isLive && (
-                  <span className="px-1.5 py-0.5 bg-[#A855F7]/20 text-[#A855F7] text-[10px] font-mono rounded animate-pulse">
-                    LIVE
+            <div
+              key={index}
+              className={`px-4 py-3 flex items-center gap-3 border-b border-[#27272A] last:border-b-0 ${isLive ? "bg-[#A855F7]/5" : ""}`}
+            >
+              {/* Color bar */}
+              <div className="w-1 h-8 rounded-full" style={{ backgroundColor: colors.accent }} />
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-sm text-[#F5F5DC]">
+                    {MAP_DISPLAY_NAMES[map] || map}
                   </span>
-                )}
+                  {isLive && (
+                    <span className="px-1.5 py-0.5 bg-[#A855F7]/20 text-[#A855F7] text-[9px] font-mono rounded animate-pulse">
+                      LIVE
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={`text-[9px] font-mono ${
+                    pickStep?.action === "leftover" ? "text-[#3b82f6]" : pickStep?.team === "team1" ? "text-[#3b82f6]" : "text-[#f59e0b]"
+                  }`}>
+                    {pickStep?.action === "leftover" ? "DECIDER" : `PICK ${getTeamName(pickStep?.team || "")}`}
+                  </span>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-[#A1A1AA]">{team1Name}</span>
-                  {picker === "team1" && (
-                    <span className="text-[8px] bg-[#3b82f6]/20 text-[#3b82f6] px-1 rounded">PICK</span>
-                  )}
-                </div>
-                <div className="font-mono text-[#A1A1AA]">
-                  {pickStep?.action === "leftover" ? "DECIDER" : `MAP ${index + 1}`}
-                </div>
-                <div className="flex items-center gap-2">
-                  {picker === "team2" && (
-                    <span className="text-[8px] bg-[#f59e0b]/20 text-[#f59e0b] px-1 rounded">PICK</span>
-                  )}
-                  <span className="font-display text-[#A1A1AA]">{team2Name}</span>
-                </div>
-              </div>
+              <span className="font-mono text-[10px] text-[#52525B]">
+                MAP {index + 1}
+              </span>
             </div>
           );
         })}
