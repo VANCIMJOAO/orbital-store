@@ -1803,8 +1803,13 @@ export default function MatchPage() {
     );
   }
 
+  // Status da partida (determinar ANTES de isLive)
+  const matchStatus = dbMatch?.status || 'scheduled';
+  const isFinished = matchStatus === 'finished';
+
   // Dados derivados para a view unificada
-  const isLive = !!matchState;
+  // Se a partida está finalizada no banco, ignorar GOTV (pode estar mostrando warmup de outra partida)
+  const isLive = !!matchState && !isFinished;
   const scheduledDate = dbMatch?.scheduled_at ? new Date(dbMatch.scheduled_at) : null;
   const roundLabel = dbMatch?.round?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || '';
 
@@ -1817,9 +1822,6 @@ export default function MatchPage() {
   const displayScoreT = isLive ? matchState.scoreT : (dbMatch?.team2_score || 0);
   const hasScore = displayScoreCT > 0 || displayScoreT > 0;
 
-  // Status da partida
-  const matchStatus = dbMatch?.status || 'scheduled';
-  const isFinished = matchStatus === 'finished';
   const isMatchLive = matchStatus === 'live' || isLive;
 
   return (

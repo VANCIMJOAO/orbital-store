@@ -82,8 +82,8 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
         id,
         status,
         map_name,
-        score_team1,
-        score_team2,
+        team1_score,
+        team2_score,
         match_phase,
         scheduled_at,
         team1:teams!matches_team1_id_fkey(id, name, tag, logo_url),
@@ -137,7 +137,7 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
     if (match) {
       const playerTeamId = mh.team_id;
       const isTeam1 = playerTeamId === (match.team1 as any)?.id;
-      const team1Won = (match.score_team1 || 0) > (match.score_team2 || 0);
+      const team1Won = (match.team1_score || 0) > (match.team2_score || 0);
       if ((isTeam1 && team1Won) || (!isTeam1 && !team1Won)) {
         totalWins++;
       }
@@ -164,7 +164,7 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
     const team1 = match.team1 as any;
     const team2 = match.team2 as any;
     const isTeam1 = playerTeamId === team1?.id;
-    const team1Won = (match.score_team1 || 0) > (match.score_team2 || 0);
+    const team1Won = (match.team1_score || 0) > (match.team2_score || 0);
     const won = (isTeam1 && team1Won) || (!isTeam1 && !team1Won);
 
     return {
@@ -172,7 +172,7 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
       mapName: match.map_name,
       date: match.scheduled_at,
       result: won ? 'win' : 'loss',
-      score: `${match.score_team1 || 0}-${match.score_team2 || 0}`,
+      score: `${match.team1_score || 0}-${match.team2_score || 0}`,
       playerTeam: isTeam1 ? team1 : team2,
       opponentTeam: isTeam1 ? team2 : team1,
       stats: {
