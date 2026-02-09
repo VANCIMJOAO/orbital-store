@@ -643,6 +643,7 @@ export type Database = {
           team2_score: number
           winner_id: string | null
           status: string
+          demo_url: string | null
           created_at: string | null
         }
         Insert: {
@@ -654,6 +655,7 @@ export type Database = {
           team2_score?: number
           winner_id?: string | null
           status?: string
+          demo_url?: string | null
           created_at?: string | null
         }
         Update: {
@@ -665,6 +667,7 @@ export type Database = {
           team2_score?: number
           winner_id?: string | null
           status?: string
+          demo_url?: string | null
           created_at?: string | null
         }
         Relationships: [

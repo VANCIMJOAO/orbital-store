@@ -735,12 +735,14 @@ export default function CampeonatoDetalhes() {
           <div className="space-y-2">
             {matches.map((match) => {
               const mStatus = matchStatusColors[match.status] || matchStatusColors.scheduled;
-              const isPending = match.status === "pending";
+              const team1Known = !!match.team1_id && !!match.team1;
+              const team2Known = !!match.team2_id && !!match.team2;
+              const bothTBD = !team1Known && !team2Known;
               return (
                 <div
                   key={match.id}
                   onClick={() => router.push(`/admin/partidas/${match.id}`)}
-                  className={`flex items-center gap-4 p-3 bg-[#1a1a2e] rounded-lg border border-[#27272A] cursor-pointer hover:border-[#A855F7]/50 transition-colors ${isPending ? "opacity-60" : ""}`}
+                  className={`flex items-center gap-4 p-3 bg-[#1a1a2e] rounded-lg border border-[#27272A] cursor-pointer hover:border-[#A855F7]/50 transition-colors ${bothTBD ? "opacity-60" : ""}`}
                 >
                   <div className="w-32">
                     <span className={`px-2 py-1 rounded text-[10px] font-mono ${mStatus.bg} ${mStatus.text}`}>
@@ -750,34 +752,34 @@ export default function CampeonatoDetalhes() {
 
                   <div className="flex-1 flex items-center gap-4">
                     <div className="flex items-center gap-2 w-40">
-                      {isPending ? (
-                        <span className="text-sm text-[#52525B] italic">A definir</span>
-                      ) : (
+                      {team1Known ? (
                         <>
                           <span className="text-sm text-[#F5F5DC]">{match.team1?.name || "TBD"}</span>
                           <span className="text-xs font-mono text-[#52525B]">{match.team1?.tag}</span>
                         </>
+                      ) : (
+                        <span className="text-sm text-[#52525B] italic">A definir</span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-lg text-[#F5F5DC] w-6 text-center">
-                        {isPending ? "-" : match.team1_score}
+                        {bothTBD ? "-" : match.team1_score}
                       </span>
                       <span className="text-[#52525B]">:</span>
                       <span className="font-mono text-lg text-[#F5F5DC] w-6 text-center">
-                        {isPending ? "-" : match.team2_score}
+                        {bothTBD ? "-" : match.team2_score}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 w-40">
-                      {isPending ? (
-                        <span className="text-sm text-[#52525B] italic">A definir</span>
-                      ) : (
+                      {team2Known ? (
                         <>
                           <span className="text-xs font-mono text-[#52525B]">{match.team2?.tag}</span>
                           <span className="text-sm text-[#F5F5DC]">{match.team2?.name || "TBD"}</span>
                         </>
+                      ) : (
+                        <span className="text-sm text-[#52525B] italic">A definir</span>
                       )}
                     </div>
                   </div>

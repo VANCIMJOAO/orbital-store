@@ -276,13 +276,79 @@ function EstatisticasContent() {
 
   const hsPercent = (hs: number, kills: number) => kills > 0 ? `${Math.round((hs / kills) * 100)}%` : "0%";
 
+  const exportPlayerStatsCSV = () => {
+    if (topPlayers.length === 0) return;
+    const header = "Player,Team,Kills,Deaths,Assists,Headshots,HS%,Total Damage,Rounds Played,ADR,K/D";
+    const rows = topPlayers.map(p => {
+      const hs = p.kills > 0 ? ((p.headshots / p.kills) * 100).toFixed(1) : "0";
+      return `"${p.username}","${p.teamName}",${p.kills},${p.deaths},${p.assists},${p.headshots},${hs}%,${p.totalDamage},${p.roundsPlayed},${p.adr.toFixed(1)},${p.rating.toFixed(2)}`;
+    });
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "player_stats.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPlayerStatsJSON = () => {
+    if (topPlayers.length === 0) return;
+    const data = topPlayers.map(p => ({
+      player: p.username,
+      team: p.teamName,
+      kills: p.kills,
+      deaths: p.deaths,
+      assists: p.assists,
+      headshots: p.headshots,
+      hs_percentage: p.kills > 0 ? parseFloat(((p.headshots / p.kills) * 100).toFixed(1)) : 0,
+      total_damage: p.totalDamage,
+      rounds_played: p.roundsPlayed,
+      adr: parseFloat(p.adr.toFixed(1)),
+      kd_ratio: parseFloat(p.rating.toFixed(2)),
+    }));
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "player_stats.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
       <TournamentHeader />
 
       <main className="flex-1 pt-16">
         <div className="max-w-6xl mx-auto px-6 py-8">
-          <h1 className="font-display text-2xl text-[#F5F5DC] mb-8">ESTATÍSTICAS</h1>
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="font-display text-2xl text-[#F5F5DC]">ESTATÍSTICAS</h1>
+            {topPlayers.length > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={exportPlayerStatsCSV}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] hover:text-[#F5F5DC] font-mono text-[10px] rounded transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  CSV
+                </button>
+                <button
+                  onClick={exportPlayerStatsJSON}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#27272A] hover:bg-[#3f3f46] text-[#A1A1AA] hover:text-[#F5F5DC] font-mono text-[10px] rounded transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  JSON
+                </button>
+              </div>
+            )}
+          </div>
 
           {loading ? (
             <div className="flex items-center justify-center h-64">

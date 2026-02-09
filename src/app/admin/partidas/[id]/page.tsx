@@ -108,6 +108,11 @@ export default function PartidaDetalhes() {
   const [vetoCompleted, setVetoCompleted] = useState(false);
   const [vetoSaving, setVetoSaving] = useState(false);
 
+  // Restore round state
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreRound, setRestoreRound] = useState(0);
+  const [restoring, setRestoring] = useState(false);
+
   // Stream URL state
   const [streamUrl, setStreamUrl] = useState("");
   const [savingStream, setSavingStream] = useState(false);
@@ -507,6 +512,52 @@ export default function PartidaDetalhes() {
     fetchMatch();
   };
 
+  const handleRestoreRound = async () => {
+    if (!match) return;
+    setRestoring(true);
+
+    try {
+      const resp = await fetch(`/api/matches/${matchId}/restore-round`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ round: restoreRound }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        alert(`Erro: ${data.error}`);
+      } else {
+        alert(`Round ${restoreRound} restaurado com sucesso!`);
+        setShowRestoreModal(false);
+      }
+    } catch {
+      alert("Erro ao conectar com o servidor");
+    }
+
+    setRestoring(false);
+  };
+
+  const handleTogglePause = async () => {
+    if (!match) return;
+    setSaving(true);
+    const supabase = createBrowserSupabaseClient();
+    const isPaused = match.match_phase === "paused";
+
+    const { error } = await supabase
+      .from("matches")
+      .update({
+        match_phase: isPaused ? "live" : "paused",
+      })
+      .eq("id", matchId);
+
+    if (error) {
+      alert(`Erro: ${error.message}`);
+    } else {
+      fetchMatch();
+    }
+    setSaving(false);
+  };
+
   const handleCancelMatch = async () => {
     if (!match) return;
     if (!confirm("Tem certeza que deseja cancelar esta partida? Essa acao nao pode ser desfeita.")) return;
@@ -609,10 +660,18 @@ export default function PartidaDetalhes() {
             <span className={`px-2 py-1 rounded text-[10px] font-mono ${status.bg} ${status.text}`}>
               {status.label}
             </span>
-            {isLive && (
+            {isLive && match.match_phase !== "paused" && (
               <span className="flex items-center gap-1 px-2 py-1 bg-[#ef4444] rounded text-[10px] font-mono text-white animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-white" />
                 LIVE
+              </span>
+            )}
+            {isLive && match.match_phase === "paused" && (
+              <span className="flex items-center gap-1 px-2 py-1 bg-[#f59e0b] rounded text-[10px] font-mono text-white">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 9v6m4-6v6" />
+                </svg>
+                PAUSADO
               </span>
             )}
           </div>
@@ -744,6 +803,46 @@ export default function PartidaDetalhes() {
                 <span className="text-xs text-[#A1A1AA]">{team2Tag}</span>
               </div>
             </div>
+
+            <button
+              onClick={handleTogglePause}
+              disabled={saving}
+              className={`flex items-center gap-2 px-6 py-3 font-mono text-sm rounded-lg transition-colors ${
+                match.match_phase === "paused"
+                  ? "bg-[#22c55e] hover:bg-[#16a34a] text-white"
+                  : "bg-[#f59e0b] hover:bg-[#d97706] text-white"
+              }`}
+            >
+              {match.match_phase === "paused" ? (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  RETOMAR
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  PAUSAR
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                setRestoreRound(Math.max(0, match.team1_score + match.team2_score - 1));
+                setShowRestoreModal(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-mono text-sm rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              RESTAURAR ROUND
+            </button>
 
             <button
               onClick={() => {
@@ -1187,6 +1286,65 @@ export default function PartidaDetalhes() {
       )}
 
       {/* Finish Modal */}
+      {/* Restore Round Modal */}
+      {showRestoreModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12121a] border border-[#27272A] rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="font-display text-xl text-[#F5F5DC] mb-4">Restaurar Round</h2>
+
+            <div className="space-y-4">
+              <p className="text-sm text-[#A1A1AA]">
+                Escolha o round para restaurar. O jogo voltará ao início deste round.
+              </p>
+
+              <div className="flex flex-col items-center gap-3">
+                <label className="text-xs text-[#A1A1AA] font-mono">ROUND</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setRestoreRound(Math.max(0, restoreRound - 1))}
+                    className="w-10 h-10 bg-[#27272A] hover:bg-[#3f3f46] rounded-lg text-[#F5F5DC] text-xl transition-colors"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    value={restoreRound}
+                    onChange={(e) => setRestoreRound(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-20 h-14 text-center font-display text-2xl bg-[#1a1a2e] border border-[#27272A] rounded-lg text-[#F5F5DC] focus:outline-none focus:border-[#3b82f6]"
+                  />
+                  <button
+                    onClick={() => setRestoreRound(restoreRound + 1)}
+                    className="w-10 h-10 bg-[#27272A] hover:bg-[#3f3f46] rounded-lg text-[#F5F5DC] text-xl transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#52525B] font-mono">
+                  Score atual: {match?.team1_score ?? 0} - {match?.team2_score ?? 0} (Round {(match?.team1_score ?? 0) + (match?.team2_score ?? 0)})
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowRestoreModal(false)}
+                  className="flex-1 px-4 py-3 bg-[#27272A] hover:bg-[#3f3f46] text-[#F5F5DC] font-mono text-xs rounded-lg transition-colors"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  onClick={handleRestoreRound}
+                  disabled={restoring}
+                  className="flex-1 px-4 py-3 bg-[#3b82f6] hover:bg-[#2563eb] disabled:bg-[#3b82f6]/50 text-white font-mono text-xs rounded-lg transition-colors"
+                >
+                  {restoring ? "RESTAURANDO..." : "RESTAURAR"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showFinishModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-[#12121a] border border-[#27272A] rounded-2xl p-6 w-full max-w-md">

@@ -8,7 +8,6 @@ import { useAuth } from "@/contexts/AuthContext";
 const navLinks = [
   { href: "/campeonatos/visao-geral", label: "VISÃO GERAL" },
   { href: "/campeonatos/partidas", label: "PARTIDAS" },
-  { href: "/campeonatos/ao-vivo", label: "AO VIVO", pulse: true },
   { href: "/campeonatos/resultados", label: "RESULTADOS" },
   { href: "/campeonatos/estatisticas", label: "ESTATÍSTICAS" },
   { href: "/campeonatos/bracket", label: "BRACKET" },
@@ -44,11 +43,8 @@ export function TournamentHeader({ rightContent }: TournamentHeaderProps = {}) {
                   isActive
                     ? "text-[#A855F7]"
                     : "text-[#A1A1AA] hover:text-[#F5F5DC]"
-                } ${link.pulse ? "flex items-center gap-1" : ""}`}
+                }`}
               >
-                {link.pulse && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                )}
                 {link.label}
               </Link>
             );

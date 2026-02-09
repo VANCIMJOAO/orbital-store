@@ -47,6 +47,37 @@ interface SupabasePlayer {
   } | null;
 }
 
+// Dados de mapa da série (match_maps)
+interface MatchMapData {
+  id: string;
+  map_name: string;
+  map_order: number;
+  team1_score: number;
+  team2_score: number;
+  winner_id: string | null;
+  status: string;
+  demo_url: string | null;
+}
+
+// Stats de jogador salvas no banco (pós-partida ou durante)
+interface MatchPlayerStat {
+  profile_id: string;
+  team_id: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  headshots: number;
+  total_damage: number;
+  adr: number | null;
+  kast_percentage: number | null;
+  rating: number | null;
+  rounds_played: number;
+  first_kills: number;
+  first_deaths: number;
+  clutch_wins: number;
+  flash_assists: number;
+}
+
 // Verifica se o jogador tem dados suficientes para calcular estatísticas
 function hasPlayerStats(player: GOTVPlayerState): boolean {
   return player.kills > 0 || player.deaths > 0 || player.damage > 0 || player.assists > 0;
@@ -113,6 +144,7 @@ function TeamScoreboardTable({
   currentRound,
   dbPlayers,
   teamLogo,
+  playerStats,
 }: {
   players: GOTVPlayerState[];
   teamName: string;
@@ -120,6 +152,7 @@ function TeamScoreboardTable({
   currentRound: number;
   dbPlayers?: SupabasePlayer[];
   teamLogo?: string | null;
+  playerStats?: MatchPlayerStat[];
 }) {
   const teamColorClass = teamSide === 'CT' ? 'text-[#3b82f6]' : 'text-[#f59e0b]';
   const teamBgClass = teamSide === 'CT' ? 'bg-[#3b82f6]/10' : 'bg-[#f59e0b]/10';
@@ -143,10 +176,20 @@ function TeamScoreboardTable({
 
   const merged: MergedPlayer[] = [];
 
-  // Primeiro: jogadores GOTV (ordenados por rating)
+  // Helper: encontrar DB stat de um jogador GOTV pelo steamId
+  const findDbStat = (gotvPlayer: GOTVPlayerState): MatchPlayerStat | undefined => {
+    if (!playerStats || !dbPlayers) return undefined;
+    const dbP = dbPlayers.find(dp => (dp.steam_id || dp.profiles?.steam_id || '') === gotvPlayer.steamId);
+    if (!dbP?.profiles?.id) return undefined;
+    return playerStats.find(s => s.profile_id === dbP.profiles!.id);
+  };
+
+  // Primeiro: jogadores GOTV (ordenados por rating - preferir DB)
   const sortedGotv = [...players].sort((a, b) => {
-    const ratingA = calculateRating(a, roundsPlayed) ?? 0;
-    const ratingB = calculateRating(b, roundsPlayed) ?? 0;
+    const dbStatA = findDbStat(a);
+    const dbStatB = findDbStat(b);
+    const ratingA = dbStatA?.rating ?? calculateRating(a, roundsPlayed) ?? 0;
+    const ratingB = dbStatB?.rating ?? calculateRating(b, roundsPlayed) ?? 0;
     return ratingB - ratingA;
   });
 
@@ -227,7 +270,11 @@ function TeamScoreboardTable({
               const profileId = dbInfo?.profiles?.id;
               const role = dbInfo?.role;
 
+              // Buscar stats reais do banco (persistidas pelo webhook MatchZy)
+              const dbStat = profileId ? playerStats?.find(s => s.profile_id === profileId) : undefined;
+
               const kd = `${player.kills}-${player.deaths}`;
+              // Preferir valores reais do MatchZy quando disponíveis, senão estimar do GOTV
               const swing = calculateSwing(player, roundsPlayed);
               const swingStr = swing !== null
                 ? (swing >= 0 ? `+${swing.toFixed(2)}%` : `${swing.toFixed(2)}%`)
@@ -235,9 +282,9 @@ function TeamScoreboardTable({
               const swingColor = swing !== null
                 ? (swing > 0 ? 'text-[#22c55e]' : swing < 0 ? 'text-[#ef4444]' : 'text-[#71717A]')
                 : 'text-[#71717A]';
-              const adr = player.damage > 0 ? (player.damage / roundsPlayed).toFixed(1) : '-';
-              const kast = calculateKAST(player, roundsPlayed);
-              const rating = calculateRating(player, roundsPlayed);
+              const adr = dbStat?.adr != null ? dbStat.adr.toFixed(1) : (player.damage > 0 ? (player.damage / roundsPlayed).toFixed(1) : '-');
+              const kast = dbStat?.kast_percentage != null ? dbStat.kast_percentage : calculateKAST(player, roundsPlayed);
+              const rating = dbStat?.rating != null ? dbStat.rating : calculateRating(player, roundsPlayed);
 
               const getRatingColor = (r: number | null) => {
                 if (r === null) return 'text-[#71717A]';
@@ -853,12 +900,14 @@ function MapsSection({
   currentMap,
   vetoData,
   bestOf,
+  matchMaps,
 }: {
   team1Name: string;
   team2Name: string;
   currentMap: string;
   vetoData: VetoDataType | null;
   bestOf: number;
+  matchMaps?: MatchMapData[];
 }) {
   if (!vetoData || !vetoData.completed) {
     return (
@@ -893,38 +942,39 @@ function MapsSection({
         <span className="text-xs text-[#52525B] font-mono">{bestOf >= 3 ? "BO3" : "BO1"}</span>
       </div>
 
-      {/* Veto cards estilo ESL - horizontal */}
-      <div className="p-3">
-        <div className="grid grid-cols-7 gap-1.5">
-          {vetoData.steps.map((step, index) => {
-            const isBanned = step.action === "ban";
-            const isPicked = step.action === "pick";
-            const colors = MAP_COLORS[step.map] || { from: "#1a1a2e", to: "#0f0f15", accent: "#A1A1AA" };
+      {/* Veto steps - vertical */}
+      <div className="divide-y divide-[#27272A]/50">
+        {vetoData.steps.map((step, index) => {
+          const isBanned = step.action === "ban";
+          const isPicked = step.action === "pick";
+          const isLeftover = step.action === "leftover";
+          const colors = MAP_COLORS[step.map] || { from: "#1a1a2e", to: "#0f0f15", accent: "#A1A1AA" };
 
-            return (
-              <div key={index} className={`rounded overflow-hidden ${isBanned ? "opacity-45 grayscale" : ""}`}>
-                {/* Action label */}
-                <div className={`text-[8px] font-mono font-bold tracking-wider text-center py-1 ${
-                  isBanned ? "bg-[#ef4444] text-white" : isPicked ? "bg-[#22c55e] text-white" : "bg-[#3b82f6] text-white"
-                }`}>
-                  {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
-                </div>
-                {/* Map body */}
-                <div
-                  className="py-3 flex flex-col items-center justify-center"
-                  style={{ background: `linear-gradient(135deg, ${colors.from}, ${colors.to})` }}
-                >
-                  <span className={`font-display text-[11px] ${isBanned ? "text-[#52525B] line-through" : "text-[#F5F5DC]"}`}>
-                    {MAP_DISPLAY_NAMES[step.map] || step.map}
-                  </span>
-                  <span className={`text-[8px] font-mono mt-0.5 ${getTeamColor(step.team)}`}>
-                    {getTeamName(step.team)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          return (
+            <div
+              key={index}
+              className={`flex items-center gap-3 px-4 py-2.5 ${isBanned ? "opacity-50" : ""}`}
+              style={{ background: !isBanned ? `linear-gradient(90deg, ${colors.from}40, transparent)` : undefined }}
+            >
+              {/* Action badge */}
+              <span className={`text-[9px] font-mono font-bold tracking-wider w-[52px] text-center py-1 rounded ${
+                isBanned ? "bg-[#ef4444]/20 text-[#ef4444]" : isPicked ? "bg-[#22c55e]/20 text-[#22c55e]" : "bg-[#3b82f6]/20 text-[#3b82f6]"
+              }`}>
+                {isBanned ? "BAN" : isPicked ? "PICK" : "DECIDER"}
+              </span>
+
+              {/* Map name */}
+              <span className={`font-display text-sm flex-1 ${isBanned ? "text-[#52525B] line-through" : "text-[#F5F5DC]"}`}>
+                {MAP_DISPLAY_NAMES[step.map] || step.map}
+              </span>
+
+              {/* Team name */}
+              <span className={`text-[10px] font-mono ${getTeamColor(step.team)}`}>
+                {getTeamName(step.team)}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Mapas da série (com destaque) */}
@@ -934,6 +984,9 @@ function MapsSection({
           const isLive = isCurrentMap;
           const pickStep = vetoData.steps.find(s => s.map === map);
           const colors = MAP_COLORS[map] || { from: "#1a1a2e", to: "#0f0f15", accent: "#A1A1AA" };
+          const mapData = matchMaps?.find(m => m.map_order === index);
+          const hasScore = mapData && (mapData.team1_score > 0 || mapData.team2_score > 0);
+          const isFinished = mapData?.status === "finished";
 
           return (
             <div
@@ -948,9 +1001,14 @@ function MapsSection({
                   <span className="font-display text-sm text-[#F5F5DC]">
                     {MAP_DISPLAY_NAMES[map] || map}
                   </span>
-                  {isLive && (
+                  {isLive && !isFinished && (
                     <span className="px-1.5 py-0.5 bg-[#A855F7]/20 text-[#A855F7] text-[9px] font-mono rounded animate-pulse">
                       LIVE
+                    </span>
+                  )}
+                  {hasScore && (
+                    <span className="font-mono text-xs text-[#F5F5DC]">
+                      {mapData.team1_score} - {mapData.team2_score}
                     </span>
                   )}
                 </div>
@@ -963,9 +1021,24 @@ function MapsSection({
                 </div>
               </div>
 
-              <span className="font-mono text-[10px] text-[#52525B]">
-                MAP {index + 1}
-              </span>
+              <div className="flex items-center gap-2">
+                {mapData?.demo_url && (
+                  <a
+                    href={mapData.demo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 hover:bg-[#27272A] rounded transition-colors group"
+                    title="Download demo"
+                  >
+                    <svg className="w-3.5 h-3.5 text-[#52525B] group-hover:text-[#A855F7]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </a>
+                )}
+                <span className="font-mono text-[10px] text-[#52525B]">
+                  MAP {index + 1}
+                </span>
+              </div>
             </div>
           );
         })}
@@ -1331,12 +1404,14 @@ function PreMatchPlayerTable({
   teamLogo,
   teamSide,
   onlineSteamIds,
+  playerStats,
 }: {
   teamPlayers: SupabasePlayer[];
   teamName: string;
   teamLogo: string | null;
   teamSide: 'CT' | 'T';
   onlineSteamIds: Set<string>;
+  playerStats?: MatchPlayerStat[];
 }) {
   const teamColorClass = teamSide === 'CT' ? 'text-[#3b82f6]' : 'text-[#f59e0b]';
   const teamBgClass = teamSide === 'CT' ? 'bg-[#3b82f6]/10' : 'bg-[#f59e0b]/10';
@@ -1375,18 +1450,45 @@ function PreMatchPlayerTable({
           </tr>
         </thead>
         <tbody>
-          {teamPlayers.map((tp) => {
+          {[...teamPlayers].sort((a, b) => {
+            // Ordenar por rating quando stats disponíveis
+            const statA = playerStats?.find(s => s.profile_id === a.profile_id);
+            const statB = playerStats?.find(s => s.profile_id === b.profile_id);
+            const ratingA = statA?.rating ?? -1;
+            const ratingB = statB?.rating ?? -1;
+            return ratingB - ratingA;
+          }).map((tp) => {
             const playerName = tp.nickname || tp.profiles?.username || 'Jogador';
             const steamId = tp.steam_id || tp.profiles?.steam_id || '';
             const isOnline = steamId ? onlineSteamIds.has(steamId) : false;
             const avatarUrl = tp.profiles?.avatar_url;
             const profileId = tp.profiles?.id;
 
+            // Buscar stats do banco para este jogador
+            const stat = playerStats?.find(s => s.profile_id === tp.profile_id);
+            const hasStats = stat && (stat.kills > 0 || stat.deaths > 0 || stat.rounds_played > 0);
+
+            const kd = hasStats ? `${stat.kills}-${stat.deaths}` : '-';
+            const adr = hasStats && stat.adr ? stat.adr.toFixed(1) : hasStats && stat.rounds_played > 0 ? (stat.total_damage / stat.rounds_played).toFixed(1) : '-';
+            const kast = hasStats && stat.kast_percentage !== null ? `${Math.round(stat.kast_percentage)}%` : '-';
+            const rating = hasStats && stat.rating !== null ? stat.rating : null;
+            const swing = hasStats && stat.rounds_played > 0
+              ? ((stat.kills * 0.8 + stat.assists * 0.3 + (stat.total_damage / stat.rounds_played) * 0.005 - stat.deaths * 0.5) / stat.rounds_played) * 100
+              : null;
+
+            const getRatingColor = (r: number | null) => {
+              if (r === null) return 'text-[#71717A]';
+              if (r >= 1.20) return 'text-[#22c55e]';
+              if (r >= 1.05) return 'text-[#F5F5DC]';
+              if (r >= 0.90) return 'text-[#f59e0b]';
+              return 'text-[#ef4444]';
+            };
+
             return (
               <tr
                 key={tp.profile_id}
                 className={`border-b border-[#27272A]/50 transition-colors ${
-                  isOnline ? 'hover:bg-[#252540]' : 'opacity-40'
+                  hasStats || isOnline ? 'hover:bg-[#252540]' : 'opacity-40'
                 }`}
               >
                 <td className="px-4 py-2.5">
@@ -1424,19 +1526,23 @@ function PreMatchPlayerTable({
                   </div>
                 </td>
                 <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                  <span className="text-sm font-mono text-[#F5F5DC]">{kd}</span>
                 </td>
                 <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                  <span className={`text-sm font-mono ${swing !== null ? (swing > 0 ? 'text-[#22c55e]' : swing < 0 ? 'text-[#ef4444]' : 'text-[#71717A]') : 'text-[#71717A]'}`}>
+                    {swing !== null ? (swing >= 0 ? `+${swing.toFixed(2)}%` : `${swing.toFixed(2)}%`) : '-'}
+                  </span>
                 </td>
                 <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                  <span className="text-sm font-mono text-[#F5F5DC]">{adr}</span>
                 </td>
                 <td className="text-center px-3 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-mono text-[#71717A]">-</span>
+                  <span className="text-sm font-mono text-[#F5F5DC]">{kast}</span>
                 </td>
                 <td className="text-right px-4 py-2.5 border-l border-[#27272A]">
-                  <span className="text-sm font-bold font-mono text-[#71717A]">-</span>
+                  <span className={`text-sm font-bold font-mono ${getRatingColor(rating)}`}>
+                    {rating !== null ? rating.toFixed(2) : '-'}
+                  </span>
                 </td>
               </tr>
             );
@@ -1506,6 +1612,8 @@ export default function MatchPage() {
   const [dbMatch, setDbMatch] = useState<SupabaseMatchData | null>(null);
   const [team1Players, setTeam1Players] = useState<SupabasePlayer[]>([]);
   const [team2Players, setTeam2Players] = useState<SupabasePlayer[]>([]);
+  const [playerStats, setPlayerStats] = useState<MatchPlayerStat[]>([]);
+  const [matchMaps, setMatchMaps] = useState<MatchMapData[]>([]);
   const [dbLoading, setDbLoading] = useState(true);
   const [dbError, setDbError] = useState(false);
 
@@ -1566,6 +1674,23 @@ export default function MatchPage() {
 
         setTeam1Players((t1.data || []) as unknown as SupabasePlayer[]);
         setTeam2Players((t2.data || []) as unknown as SupabasePlayer[]);
+
+        // Buscar stats dos jogadores (para partidas live/finished sem GOTV)
+        if (match.status === 'live' || match.status === 'finished') {
+          const { data: stats } = await supabase
+            .from('match_player_stats')
+            .select('profile_id, team_id, kills, deaths, assists, headshots, total_damage, adr, kast_percentage, rating, rounds_played, first_kills, first_deaths, clutch_wins, flash_assists')
+            .eq('match_id', matchId);
+          setPlayerStats((stats || []) as unknown as MatchPlayerStat[]);
+        }
+
+        // Buscar match_maps (mapas da série com scores e demo_url)
+        const { data: maps } = await supabase
+          .from('match_maps')
+          .select('id, map_name, map_order, team1_score, team2_score, winner_id, status, demo_url')
+          .eq('match_id', matchId)
+          .order('map_order', { ascending: true });
+        setMatchMaps((maps || []) as unknown as MatchMapData[]);
       } catch {
         setDbError(true);
       } finally {
@@ -1575,6 +1700,25 @@ export default function MatchPage() {
 
     fetchMatchData();
   }, [matchId]);
+
+  // Atualizar stats dos jogadores periodicamente durante partida live
+  useEffect(() => {
+    if (!matchId || !isConnected) return;
+
+    const refreshStats = async () => {
+      const { data: stats } = await supabase
+        .from('match_player_stats')
+        .select('profile_id, team_id, kills, deaths, assists, headshots, total_damage, adr, kast_percentage, rating, rounds_played, first_kills, first_deaths, clutch_wins, flash_assists')
+        .eq('match_id', matchId);
+      if (stats && stats.length > 0) {
+        setPlayerStats(stats as unknown as MatchPlayerStat[]);
+      }
+    };
+
+    // Refresh a cada 15 segundos
+    const interval = setInterval(refreshStats, 15000);
+    return () => clearInterval(interval);
+  }, [matchId, isConnected]);
 
   // Set de steamIds online (jogadores conectados ao GOTV)
   const onlineSteamIds = new Set(
@@ -1659,20 +1803,52 @@ export default function MatchPage() {
     );
   }
 
-  // === PRÉ-PARTIDA: Temos dados do Supabase mas sem GOTV (partida ainda não começou) ===
-  if (!matchState && dbMatch) {
-    const scheduledDate = dbMatch.scheduled_at ? new Date(dbMatch.scheduled_at) : null;
-    const roundLabel = dbMatch.round?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || '';
+  // Dados derivados para a view unificada
+  const isLive = !!matchState;
+  const scheduledDate = dbMatch?.scheduled_at ? new Date(dbMatch.scheduled_at) : null;
+  const roundLabel = dbMatch?.round?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || '';
 
-    return (
-      <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-        <TournamentHeader />
+  // Nomes dos times - sempre preferir banco, depois GOTV
+  const team1Name = dbMatch?.team1?.name || 'TBD';
+  const team2Name = dbMatch?.team2?.name || 'TBD';
 
-        {/* Conteúdo pré-partida */}
-        <main className="flex-1 pt-20 pb-8 px-4">
-          <div className="max-w-4xl mx-auto space-y-6">
+  // Scores - preferir GOTV ao vivo, fallback banco
+  const displayScoreCT = isLive ? matchState.scoreCT : (dbMatch?.team1_score || 0);
+  const displayScoreT = isLive ? matchState.scoreT : (dbMatch?.team2_score || 0);
+  const hasScore = displayScoreCT > 0 || displayScoreT > 0;
 
-            {/* Placar principal pré-partida */}
+  // Status da partida
+  const matchStatus = dbMatch?.status || 'scheduled';
+  const isFinished = matchStatus === 'finished';
+  const isMatchLive = matchStatus === 'live' || isLive;
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
+      <TournamentHeader />
+
+      <main className="flex-1 pt-20 pb-8 px-4">
+        <div className="space-y-4">
+
+          {/* === PLACAR PRINCIPAL === */}
+          {/* Quando GOTV conectado: MainScoreboard com dados ao vivo */}
+          {isLive && matchState && (
+            <MainScoreboard
+              teamCT={matchState.teamCT?.name && matchState.teamCT.name !== "Counter-Terrorists"
+                ? { name: matchState.teamCT.name, logo: matchState.teamCT.logoUrl }
+                : { name: team1Name, logo: dbMatch?.team1?.logo_url || matchState.teamCT?.logoUrl }}
+              teamT={matchState.teamT?.name && matchState.teamT.name !== "Terrorists"
+                ? { name: matchState.teamT.name, logo: matchState.teamT.logoUrl }
+                : { name: team2Name, logo: dbMatch?.team2?.logo_url || matchState.teamT?.logoUrl }}
+              scoreCT={matchState.scoreCT}
+              scoreT={matchState.scoreT}
+              mapName={matchState.mapName || dbMatch?.map_name || ""}
+              currentRound={matchState.currentRound}
+              roundPhase={matchState.roundPhase}
+            />
+          )}
+
+          {/* Quando sem GOTV: Header estático com dados do banco */}
+          {!isLive && dbMatch && (
             <div className="bg-[#0f0f15] border border-[#27272A] rounded-xl p-6">
               {/* Torneio e round */}
               <div className="text-center mb-4">
@@ -1699,14 +1875,14 @@ export default function MatchPage() {
                 <div className="flex flex-col items-center gap-2 flex-1">
                   <div className="w-16 h-16 rounded-lg bg-[#1a1a2e] border border-[#27272A] flex items-center justify-center overflow-hidden">
                     {dbMatch.team1?.logo_url ? (
-                      <img src={dbMatch.team1.logo_url} alt={dbMatch.team1.name} className="w-12 h-12 object-contain" />
+                      <img src={dbMatch.team1.logo_url} alt={team1Name} className="w-12 h-12 object-contain" />
                     ) : (
                       <span className="font-display text-2xl text-[#3b82f6]">
                         {dbMatch.team1?.tag?.charAt(0) || '?'}
                       </span>
                     )}
                   </div>
-                  <span className="font-display text-lg text-[#F5F5DC]">{dbMatch.team1?.name || 'TBD'}</span>
+                  <span className="font-display text-lg text-[#F5F5DC]">{team1Name}</span>
                   {dbMatch.team1?.tag && (
                     <span className="text-[10px] font-mono text-[#71717A]">{dbMatch.team1.tag}</span>
                   )}
@@ -1714,16 +1890,32 @@ export default function MatchPage() {
 
                 {/* Score / VS */}
                 <div className="flex flex-col items-center gap-1">
-                  {dbMatch.status === 'finished' ? (
+                  {hasScore || isFinished ? (
                     <div className="flex items-center gap-3">
-                      <span className="font-display text-4xl text-[#F5F5DC]">{dbMatch.team1_score}</span>
+                      <span className="font-display text-4xl text-[#F5F5DC]">{displayScoreCT}</span>
                       <span className="text-[#71717A] text-lg">:</span>
-                      <span className="font-display text-4xl text-[#F5F5DC]">{dbMatch.team2_score}</span>
+                      <span className="font-display text-4xl text-[#F5F5DC]">{displayScoreT}</span>
                     </div>
                   ) : (
                     <span className="font-display text-3xl text-[#71717A]">VS</span>
                   )}
-                  {scheduledDate && dbMatch.status !== 'finished' && (
+                  {/* Status badges */}
+                  {isMatchLive && !isFinished && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 text-red-400 text-xs font-mono rounded-full">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        AO VIVO
+                      </span>
+                    </div>
+                  )}
+                  {isFinished && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-500/20 text-green-400 text-xs font-mono rounded-full">
+                        FINALIZADO
+                      </span>
+                    </div>
+                  )}
+                  {scheduledDate && !isFinished && !isMatchLive && (
                     <div className="flex flex-col items-center gap-0.5 mt-2">
                       <span className="text-[#A1A1AA] text-xs font-mono">
                         {scheduledDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
@@ -1739,19 +1931,28 @@ export default function MatchPage() {
                 <div className="flex flex-col items-center gap-2 flex-1">
                   <div className="w-16 h-16 rounded-lg bg-[#1a1a2e] border border-[#27272A] flex items-center justify-center overflow-hidden">
                     {dbMatch.team2?.logo_url ? (
-                      <img src={dbMatch.team2.logo_url} alt={dbMatch.team2.name} className="w-12 h-12 object-contain" />
+                      <img src={dbMatch.team2.logo_url} alt={team2Name} className="w-12 h-12 object-contain" />
                     ) : (
                       <span className="font-display text-2xl text-[#f59e0b]">
                         {dbMatch.team2?.tag?.charAt(0) || '?'}
                       </span>
                     )}
                   </div>
-                  <span className="font-display text-lg text-[#F5F5DC]">{dbMatch.team2?.name || 'TBD'}</span>
+                  <span className="font-display text-lg text-[#F5F5DC]">{team2Name}</span>
                   {dbMatch.team2?.tag && (
                     <span className="text-[10px] font-mono text-[#71717A]">{dbMatch.team2.tag}</span>
                   )}
                 </div>
               </div>
+
+              {/* Mapa atual */}
+              {dbMatch.map_name && (isMatchLive || isFinished) && (
+                <div className="text-center mt-3">
+                  <span className="text-[#A1A1AA] text-xs font-mono">
+                    {MAP_DISPLAY_NAMES[dbMatch.map_name] || dbMatch.map_name}
+                  </span>
+                </div>
+              )}
 
               {/* Status indicator */}
               {isConnecting && (
@@ -1763,90 +1964,26 @@ export default function MatchPage() {
                 </div>
               )}
             </div>
-
-            {/* Maps + Jogadores + Watch */}
-            <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_260px] gap-4">
-              {/* Coluna esquerda: Maps */}
-              <div>
-                <MapsSection
-                  team1Name={dbMatch.team1?.name || "Time 1"}
-                  team2Name={dbMatch.team2?.name || "Time 2"}
-                  currentMap={dbMatch.map_name || ""}
-                  vetoData={dbMatch.veto_data || null}
-                  bestOf={dbMatch.best_of || 1}
-                />
-              </div>
-
-              {/* Coluna central: Jogadores */}
-              <div className="space-y-4">
-                <PreMatchPlayerTable
-                  teamPlayers={team1Players}
-                  teamName={dbMatch.team1?.name || 'Time 1'}
-                  teamLogo={dbMatch.team1?.logo_url || null}
-                  teamSide="CT"
-                  onlineSteamIds={onlineSteamIds}
-                />
-                <PreMatchPlayerTable
-                  teamPlayers={team2Players}
-                  teamName={dbMatch.team2?.name || 'Time 2'}
-                  teamLogo={dbMatch.team2?.logo_url || null}
-                  teamSide="T"
-                  onlineSteamIds={onlineSteamIds}
-                />
-              </div>
-
-              {/* Coluna direita: Watch */}
-              <div>
-                <WatchSection streamUrl={dbMatch.stream_url || null} />
-              </div>
-            </div>
-
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      <TournamentHeader />
-
-      {/* Conteúdo */}
-      <main className="flex-1 pt-20 pb-8 px-4">
-        <div className="space-y-4">
-          {/* Placar principal */}
-          {matchState && (
-            <MainScoreboard
-              teamCT={matchState.teamCT?.name && matchState.teamCT.name !== "Counter-Terrorists"
-                ? { name: matchState.teamCT.name, logo: matchState.teamCT.logoUrl }
-                : { name: dbMatch?.team1?.name || matchState.teamCT?.name || "Counter-Terrorists", logo: dbMatch?.team1?.logo_url || matchState.teamCT?.logoUrl }}
-              teamT={matchState.teamT?.name && matchState.teamT.name !== "Terrorists"
-                ? { name: matchState.teamT.name, logo: matchState.teamT.logoUrl }
-                : { name: dbMatch?.team2?.name || matchState.teamT?.name || "Terrorists", logo: dbMatch?.team2?.logo_url || matchState.teamT?.logoUrl }}
-              scoreCT={matchState.scoreCT}
-              scoreT={matchState.scoreT}
-              mapName={matchState.mapName || dbMatch?.map_name || ""}
-              currentRound={matchState.currentRound}
-              roundPhase={matchState.roundPhase}
-            />
           )}
 
-          {/* Layout principal: Maps | Scoreboard + Kill Feed | Watch */}
+          {/* === LAYOUT 3 COLUNAS: Maps | Centro | Watch === */}
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_260px] gap-4">
             {/* Coluna esquerda: Maps */}
             <div className="order-2 lg:order-1">
               <MapsSection
-                team1Name={dbMatch?.team1?.name || "Time 1"}
-                team2Name={dbMatch?.team2?.name || "Time 2"}
+                team1Name={team1Name}
+                team2Name={team2Name}
                 currentMap={matchState?.mapName || dbMatch?.map_name || ""}
                 vetoData={dbMatch?.veto_data || null}
                 bestOf={dbMatch?.best_of || 1}
+                matchMaps={matchMaps}
               />
             </div>
 
-            {/* Área central: Scorebot + Scoreboards + Kill Feed */}
+            {/* === COLUNA CENTRAL === */}
             <div className="order-1 lg:order-2 space-y-4">
-              {/* Indicador de fase (se disponível) */}
+
+              {/* Indicador de fase GOTV (warmup, knife, halftime, etc) */}
               {phase && phase !== 'live' && phase !== 'idle' && (
                 <div className="text-center">
                   <span className={`inline-block px-3 py-1 text-xs font-mono rounded ${
@@ -1868,48 +2005,155 @@ export default function MatchPage() {
                 </div>
               )}
 
-              {/* Live Scorebot - Estado atual do round */}
-              <LiveScorebot
-                playersCT={sortedPlayersCT}
-                playersT={sortedPlayersT}
-                teamCTName={teamCTName}
-                teamTName={teamTName}
-                scoreCT={matchState?.scoreCT || 0}
-                scoreT={matchState?.scoreT || 0}
-                currentRound={matchState?.currentRound || 1}
-                mapName={matchState?.mapName || dbMatch?.map_name || ""}
-                roundPhase={matchState?.roundPhase || "live"}
-                roundTimeRemaining={matchState?.roundTimeRemaining}
-              />
-
-              {/* Game Log - Entre o scorebot e as tabelas */}
-              <GameLog
-                events={gameLog}
-                currentRound={matchState?.currentRound || 0}
-              />
-
-              {/* Scoreboards um embaixo do outro */}
-              <div className="space-y-4">
-                {/* CT Scoreboard */}
-                <TeamScoreboardTable
-                  players={sortedPlayersCT}
-                  teamName={teamCTName}
-                  teamSide="CT"
+              {/* Live Scorebot - quando GOTV conectado */}
+              {isLive && (
+                <LiveScorebot
+                  playersCT={sortedPlayersCT}
+                  playersT={sortedPlayersT}
+                  teamCTName={teamCTName}
+                  teamTName={teamTName}
+                  scoreCT={matchState?.scoreCT || 0}
+                  scoreT={matchState?.scoreT || 0}
                   currentRound={matchState?.currentRound || 1}
-                  dbPlayers={teamCTName === dbMatch?.team1?.name ? team1Players : teamCTName === dbMatch?.team2?.name ? team2Players : undefined}
-                  teamLogo={teamCTName === dbMatch?.team1?.name ? dbMatch?.team1?.logo_url : teamCTName === dbMatch?.team2?.name ? dbMatch?.team2?.logo_url : null}
+                  mapName={matchState?.mapName || dbMatch?.map_name || ""}
+                  roundPhase={matchState?.roundPhase || "live"}
+                  roundTimeRemaining={matchState?.roundTimeRemaining}
                 />
+              )}
 
-                {/* T Scoreboard */}
-                <TeamScoreboardTable
-                  players={sortedPlayersT}
-                  teamName={teamTName}
-                  teamSide="T"
-                  currentRound={matchState?.currentRound || 1}
-                  dbPlayers={teamTName === dbMatch?.team2?.name ? team2Players : teamTName === dbMatch?.team1?.name ? team1Players : undefined}
-                  teamLogo={teamTName === dbMatch?.team2?.name ? dbMatch?.team2?.logo_url : teamTName === dbMatch?.team1?.name ? dbMatch?.team1?.logo_url : null}
+              {/* Scorebot fallback - partida live/finished sem GOTV */}
+              {!isLive && (isMatchLive || isFinished) && dbMatch && (
+                <div className="bg-[#0f0f15] border border-[#27272A] rounded-lg overflow-hidden">
+                  {/* Header com mapa e round */}
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-[#27272A]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#A1A1AA] text-xs font-mono uppercase">
+                        {MAP_DISPLAY_NAMES[dbMatch.map_name || ''] || dbMatch.map_name || 'TBD'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isMatchLive && !isFinished && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-red-500/20 text-red-400 text-[10px] font-mono rounded">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          LIVE
+                        </span>
+                      )}
+                      {isFinished && (
+                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-mono rounded">
+                          FINAL
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Placar */}
+                  <div className="flex items-center justify-between px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-[#3b82f6]/10 flex items-center justify-center">
+                        {dbMatch.team1?.logo_url ? (
+                          <img src={dbMatch.team1.logo_url} alt={team1Name} className="w-6 h-6 object-contain" />
+                        ) : (
+                          <span className="text-[#3b82f6] text-xs font-bold">{dbMatch.team1?.tag?.charAt(0) || 'T1'}</span>
+                        )}
+                      </div>
+                      <span className="text-[#3b82f6] text-sm font-mono font-bold">{team1Name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <span className="font-display text-3xl text-[#F5F5DC]">{displayScoreCT}</span>
+                      <span className="text-[#52525B] text-lg">:</span>
+                      <span className="font-display text-3xl text-[#F5F5DC]">{displayScoreT}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-[#f59e0b] text-sm font-mono font-bold">{team2Name}</span>
+                      <div className="w-8 h-8 rounded bg-[#f59e0b]/10 flex items-center justify-center">
+                        {dbMatch.team2?.logo_url ? (
+                          <img src={dbMatch.team2.logo_url} alt={team2Name} className="w-6 h-6 object-contain" />
+                        ) : (
+                          <span className="text-[#f59e0b] text-xs font-bold">{dbMatch.team2?.tag?.charAt(0) || 'T2'}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mensagem de status */}
+                  {isMatchLive && !isFinished && (
+                    <div className="px-4 py-2 border-t border-[#27272A] text-center">
+                      <span className="text-[#52525B] text-[10px] font-mono">
+                        {isConnecting ? 'Conectando ao servidor de dados ao vivo...' : 'Dados ao vivo indisponíveis - placar atualizado pelo servidor'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Game Log - quando GOTV conectado */}
+              {isLive && gameLog.length > 0 && (
+                <GameLog
+                  events={gameLog}
+                  currentRound={matchState?.currentRound || 0}
                 />
-              </div>
+              )}
+
+              {/* Game Log placeholder - partida live sem GOTV */}
+              {!isLive && isMatchLive && !isFinished && (
+                <div className="bg-[#0f0f15] border border-[#27272A] rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="font-mono text-xs text-[#F5F5DC] tracking-wider">GAME LOG</span>
+                  </div>
+                  <div className="text-center py-6">
+                    <span className="text-[#52525B] text-xs font-mono">
+                      Aguardando conexão com o servidor...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* === SCOREBOARDS === */}
+              {/* Quando GOTV conectado: TeamScoreboardTable com stats ao vivo */}
+              {isLive ? (
+                <div className="space-y-4">
+                  <TeamScoreboardTable
+                    players={sortedPlayersCT}
+                    teamName={teamCTName}
+                    teamSide="CT"
+                    currentRound={matchState?.currentRound || 1}
+                    dbPlayers={teamCTName === dbMatch?.team1?.name ? team1Players : teamCTName === dbMatch?.team2?.name ? team2Players : undefined}
+                    teamLogo={teamCTName === dbMatch?.team1?.name ? dbMatch?.team1?.logo_url : teamCTName === dbMatch?.team2?.name ? dbMatch?.team2?.logo_url : null}
+                    playerStats={teamCTName === dbMatch?.team1?.name ? playerStats.filter(s => s.team_id === dbMatch?.team1?.id) : teamCTName === dbMatch?.team2?.name ? playerStats.filter(s => s.team_id === dbMatch?.team2?.id) : undefined}
+                  />
+                  <TeamScoreboardTable
+                    players={sortedPlayersT}
+                    teamName={teamTName}
+                    teamSide="T"
+                    currentRound={matchState?.currentRound || 1}
+                    dbPlayers={teamTName === dbMatch?.team2?.name ? team2Players : teamTName === dbMatch?.team1?.name ? team1Players : undefined}
+                    teamLogo={teamTName === dbMatch?.team2?.name ? dbMatch?.team2?.logo_url : teamTName === dbMatch?.team1?.name ? dbMatch?.team1?.logo_url : null}
+                    playerStats={teamTName === dbMatch?.team2?.name ? playerStats.filter(s => s.team_id === dbMatch?.team2?.id) : teamTName === dbMatch?.team1?.name ? playerStats.filter(s => s.team_id === dbMatch?.team1?.id) : undefined}
+                  />
+                </div>
+              ) : (
+                /* Sem GOTV: PreMatchPlayerTable com stats do banco */
+                <div className="space-y-4">
+                  <PreMatchPlayerTable
+                    teamPlayers={team1Players}
+                    teamName={team1Name}
+                    teamLogo={dbMatch?.team1?.logo_url || null}
+                    teamSide="CT"
+                    onlineSteamIds={onlineSteamIds}
+                    playerStats={playerStats.filter(s => s.team_id === dbMatch?.team1?.id)}
+                  />
+                  <PreMatchPlayerTable
+                    teamPlayers={team2Players}
+                    teamName={team2Name}
+                    teamLogo={dbMatch?.team2?.logo_url || null}
+                    teamSide="T"
+                    onlineSteamIds={onlineSteamIds}
+                    playerStats={playerStats.filter(s => s.team_id === dbMatch?.team2?.id)}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Coluna direita: Watch */}

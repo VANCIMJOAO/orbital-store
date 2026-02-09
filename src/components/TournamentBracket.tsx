@@ -36,10 +36,14 @@ const statusColors: Record<string, { bg: string; border: string; pulse?: boolean
 };
 
 function MatchCard({ match, onClick }: { match: Match; onClick?: () => void }) {
-  const isPending = match.status === "pending";
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const style = statusColors[match.status] || statusColors.scheduled;
+
+  // Determinar se cada time é TBD individualmente
+  const team1Known = !!match.team1_id && !!match.team1;
+  const team2Known = !!match.team2_id && !!match.team2;
+  const bothTBD = !team1Known && !team2Known;
 
   const formatTime = (dateString: string | null) => {
     if (!dateString) return "--:--";
@@ -82,32 +86,32 @@ function MatchCard({ match, onClick }: { match: Match; onClick?: () => void }) {
       </div>
 
       {/* Team 1 */}
-      <div className={`flex items-center gap-2 px-2 py-1.5 ${isPending ? "opacity-40" : ""}`}>
+      <div className={`flex items-center gap-2 px-2 py-1.5 ${!team1Known ? "opacity-40" : ""}`}>
         <div className="w-5 h-5 rounded bg-[#27272A] flex items-center justify-center flex-shrink-0">
           <span className="text-[8px] font-mono text-[#A1A1AA]">
-            {isPending ? "?" : match.team1?.tag?.substring(0, 2) || "?"}
+            {team1Known ? match.team1?.tag?.substring(0, 2) || "?" : "?"}
           </span>
         </div>
-        <span className={`text-xs truncate flex-1 ${getTeamStyle(match.team1_id)} ${isPending ? "italic text-[#52525B]" : "text-[#F5F5DC]"}`}>
-          {isPending ? "TBD" : match.team1?.name || "TBD"}
+        <span className={`text-xs truncate flex-1 ${getTeamStyle(match.team1_id)} ${!team1Known ? "italic text-[#52525B]" : "text-[#F5F5DC]"}`}>
+          {team1Known ? match.team1?.name : "TBD"}
         </span>
         <span className={`font-mono text-sm font-bold ${getTeamStyle(match.team1_id)}`}>
-          {isPending ? "-" : match.team1_score}
+          {bothTBD ? "-" : match.team1_score}
         </span>
       </div>
 
       {/* Team 2 */}
-      <div className={`flex items-center gap-2 px-2 py-1.5 border-t border-[#27272A]/30 ${isPending ? "opacity-40" : ""}`}>
+      <div className={`flex items-center gap-2 px-2 py-1.5 border-t border-[#27272A]/30 ${!team2Known ? "opacity-40" : ""}`}>
         <div className="w-5 h-5 rounded bg-[#27272A] flex items-center justify-center flex-shrink-0">
           <span className="text-[8px] font-mono text-[#A1A1AA]">
-            {isPending ? "?" : match.team2?.tag?.substring(0, 2) || "?"}
+            {team2Known ? match.team2?.tag?.substring(0, 2) || "?" : "?"}
           </span>
         </div>
-        <span className={`text-xs truncate flex-1 ${getTeamStyle(match.team2_id)} ${isPending ? "italic text-[#52525B]" : "text-[#F5F5DC]"}`}>
-          {isPending ? "TBD" : match.team2?.name || "TBD"}
+        <span className={`text-xs truncate flex-1 ${getTeamStyle(match.team2_id)} ${!team2Known ? "italic text-[#52525B]" : "text-[#F5F5DC]"}`}>
+          {team2Known ? match.team2?.name : "TBD"}
         </span>
         <span className={`font-mono text-sm font-bold ${getTeamStyle(match.team2_id)}`}>
-          {isPending ? "-" : match.team2_score}
+          {bothTBD ? "-" : match.team2_score}
         </span>
       </div>
     </div>
