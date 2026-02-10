@@ -39,6 +39,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# windows artifacts
+nul
+
+# images
+cs2_campeonatos_clean_v1.png
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
