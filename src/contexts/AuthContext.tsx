@@ -167,6 +167,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: {
           username: data.username,
           steam_id: data.steamId,
+          is_tournament_player: data.isTournamentPlayer || false,
+          is_store_customer: data.isStoreCustomer || false,
         },
       },
     });
@@ -175,25 +177,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: error as Error };
     }
 
-    // Criar perfil do usuário
+    // O trigger handle_new_user cria o profile automaticamente com os dados do
+    // raw_user_meta_data. Usamos UPSERT para garantir que todos os campos extras
+    // sejam salvos, mesmo se o trigger já criou o profile (evita conflito 409/23505).
     if (authData.user) {
       const { error: profileError } = await supabase
         .from("profiles")
-        .insert({
-          id: authData.user.id,
-          username: data.username,
-          steam_id: data.steamId || null,
-          name: data.name || null,
-          is_tournament_player: data.isTournamentPlayer || false,
-          is_store_customer: data.isStoreCustomer || false,
-          level: 1,
-          xp: 0,
-        });
+        .upsert(
+          {
+            id: authData.user.id,
+            username: data.username,
+            steam_id: data.steamId || null,
+            name: data.name || null,
+            is_tournament_player: data.isTournamentPlayer || false,
+            is_store_customer: data.isStoreCustomer || false,
+            level: 1,
+            xp: 0,
+          },
+          { onConflict: "id" }
+        );
 
       if (profileError) {
-        // Tratar username duplicado (race condition entre check e insert)
-        if ((profileError as any).code === "23505") {
+        // Tratar username duplicado (constraint UNIQUE no username)
+        if ((profileError as any).code === "23505" && (profileError as any).message?.includes("username")) {
           return { error: new Error("Este nome de usuário já está em uso") };
+        }
+        // Ignorar outros erros de conflito (trigger já criou o profile com sucesso)
+        if ((profileError as any).code === "23505") {
+          return { error: null };
         }
         return { error: profileError as unknown as Error };
       }

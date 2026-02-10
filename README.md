@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Orbital Roxa - CS2 Tournament System
 
-## Getting Started
+Sistema completo de gerenciamento de torneios CS2 com scoreboard ao vivo, bracket double elimination, estatisticas de jogadores e loja streetwear.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+| Componente | Tecnologia | Deploy |
+|-----------|-----------|--------|
+| Frontend + API | Next.js 16.1.6, React 19, TypeScript | Vercel |
+| GOTV Server | Go 1.24, gorilla/websocket, demoinfocs-golang | Railway |
+| Banco de Dados | Supabase (PostgreSQL 17) | Supabase Cloud |
+| Pagamentos | Stripe | - |
+| CS2 Server | MatchZy (CounterStrikeSharp) | Pterodactyl |
+
+## Estrutura do Projeto
+
+```
+orbitalroxa/
+  orbital-store/     # Next.js app (frontend + API)
+  gotv-server/       # Go WebSocket server (real-time)
+  orbital-ads/       # Python billboard generator (CS2 sponsors)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Quick Start
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# 1. Clonar e instalar
+cd orbital-store
+npm install
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# 2. Configurar ambiente
+cp .env.example .env.local
+# Editar .env.local com suas credenciais
 
-## Learn More
+# 3. Rodar dev server
+npm run dev
+# Abrir http://localhost:3000
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Documentacao
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Documento | Descricao |
+|-----------|-----------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitetura do sistema, fluxo de dados, diagramas |
+| [docs/SETUP.md](docs/SETUP.md) | Guia completo de instalacao e configuracao |
+| [docs/API.md](docs/API.md) | Todos os endpoints REST e WebSocket |
+| [docs/DATABASE.md](docs/DATABASE.md) | Schema do banco, tabelas, relacionamentos |
+| [docs/GOTV.md](docs/GOTV.md) | Integracao GOTV server (Go + WebSocket) |
+| [docs/MATCHZY.md](docs/MATCHZY.md) | Integracao MatchZy, comandos, lifecycle |
+| [docs/COMPONENTS.md](docs/COMPONENTS.md) | Componentes React, hooks, contexts |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Funcionalidades Principais
 
-## Deploy on Vercel
+### Torneios
+- Bracket Double Elimination (8 times)
+- Veto de mapas (BO1/BO3)
+- Avanco automatico de bracket
+- Scoreboard ao vivo estilo HLTV
+- Estatisticas detalhadas (ADR, KAST, Rating 2.0)
+- Game log com todos eventos por round
+- Kill feed em tempo real
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Admin
+- Gerenciamento de torneios, times e jogadores
+- Controle manual de partidas (iniciar, finalizar, restaurar round)
+- Carregamento automatico de config no servidor CS2
+- Bracket visual com edicao
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Loja
+- Catalogo de produtos streetwear
+- Checkout com Stripe
+- Sistema de drops com countdown
+- Gerenciamento de pedidos
+
+## Design System
+
+| Token | Cor | Uso |
+|-------|-----|-----|
+| Background Primary | `#0A0A0A` | Fundo principal |
+| Background Secondary | `#0f0f15` | Cards, sections |
+| Background Tertiary | `#12121a` | Elementos elevados |
+| Accent | `#A855F7` | Destaques, botoes, links |
+| CT | `#3b82f6` | Counter-Terrorists |
+| T | `#f59e0b` | Terrorists |
+| Text Primary | `#F5F5DC` | Texto principal |
+| Text Secondary | `#A1A1AA` | Texto secundario |
+
+## Scripts
+
+```bash
+npm run dev      # Development server (localhost:3000)
+npm run build    # Build para producao
+npm run start    # Servir build de producao
+npm run lint     # ESLint
+```
+
+## Variaveis de Ambiente
+
+Ver [.env.example](.env.example) para lista completa. Documentacao detalhada em [docs/SETUP.md](docs/SETUP.md).

@@ -54,6 +54,7 @@ function PartidasContent() {
   const [loading, setLoading] = useState(true);
 
   // Enrich GOTV live matches with real team names from Supabase
+  // Só exibe partidas que têm um match correspondente no banco de dados
   useEffect(() => {
     async function enrichLiveMatches() {
       if (liveMatches.length === 0) {
@@ -61,9 +62,8 @@ function PartidasContent() {
         return;
       }
 
-      // Fetch DB data for matches that have dbMatchId
+      // Separar matches com e sem dbMatchId
       const linked = liveMatches.filter((m) => m.dbMatchId);
-      const unlinked = liveMatches.filter((m) => !m.dbMatchId);
       let dbMap = new Map<string, any>();
 
       if (linked.length > 0) {
@@ -80,43 +80,25 @@ function PartidasContent() {
         dbMap = new Map((dbMatches || []).map((m: any) => [m.id, m]));
       }
 
-      // For unlinked GOTV matches, try to find a matching match in the DB
-      // Priority: status=live first, then first scheduled match (most likely the one being played)
-      let fallbackMatch: any = null;
-      if (unlinked.length > 0) {
-        const { data: liveDb } = await supabase
-          .from("matches")
-          .select(`
-            id, round, map_name,
-            team1:teams!matches_team1_id_fkey(name, tag, logo_url),
-            team2:teams!matches_team2_id_fkey(name, tag, logo_url)
-          `)
-          .in("status", ["live", "scheduled"])
-          .order("scheduled_at", { ascending: true })
-          .limit(1);
-
-        if (liveDb && liveDb.length > 0) {
-          fallbackMatch = liveDb[0];
-        }
-      }
-
+      // Só exibir partidas GOTV que têm um match real no banco de dados.
+      // Partidas sem dbMatchId (ex: servidor CS2 rodando sem campeonato) são ignoradas.
       setEnrichedLiveMatches(
-        liveMatches.map((live) => {
-          const db = live.dbMatchId
-            ? dbMap.get(live.dbMatchId)
-            : fallbackMatch;
-          return {
-            gotvMatchId: live.matchId,
-            dbMatchId: live.dbMatchId || db?.id || live.matchId,
-            mapName: live.mapName || db?.map_name || "",
-            scoreCT: live.scoreCT,
-            scoreT: live.scoreT,
-            currentRound: live.currentRound,
-            team1: db?.team1 || null,
-            team2: db?.team2 || null,
-            round: db?.round || undefined,
-          };
-        })
+        linked
+          .filter((live) => dbMap.has(live.dbMatchId!))
+          .map((live) => {
+            const db = dbMap.get(live.dbMatchId!);
+            return {
+              gotvMatchId: live.matchId,
+              dbMatchId: live.dbMatchId!,
+              mapName: live.mapName || db?.map_name || "",
+              scoreCT: live.scoreCT,
+              scoreT: live.scoreT,
+              currentRound: live.currentRound,
+              team1: db?.team1 || null,
+              team2: db?.team2 || null,
+              round: db?.round || undefined,
+            };
+          })
       );
     }
 
