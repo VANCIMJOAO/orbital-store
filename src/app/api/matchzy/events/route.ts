@@ -113,17 +113,52 @@ interface MatchZyEvent {
 }
 
 // ============================================================
-// Caches
+// Caches com TTL para evitar memory leak
 // ============================================================
 
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutos
+const MAX_CACHE_SIZE = 100;
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+class TTLCache<T> {
+  private cache = new Map<string, CacheEntry<T>>();
+
+  get(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  has(key: string): boolean {
+    return this.get(key) !== undefined;
+  }
+
+  set(key: string, value: T): void {
+    // Evitar crescimento infinito
+    if (this.cache.size >= MAX_CACHE_SIZE) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) this.cache.delete(firstKey);
+    }
+    this.cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL });
+  }
+}
+
 // Cache de resolução de matchId numérico → UUID
-const matchIdCache = new Map<string, string>();
+const matchIdCache = new TTLCache<string>();
 
 // Cache de steamId → { profileId, teamId }
-const steamIdCache = new Map<string, { profileId: string; teamId: string }>();
+const steamIdCache = new TTLCache<{ profileId: string; teamId: string }>();
 
 // Cache de matchId → match_map_id (mapa atual)
-const matchMapCache = new Map<string, string>();
+const matchMapCache = new TTLCache<string>();
 
 // ============================================================
 // Helpers

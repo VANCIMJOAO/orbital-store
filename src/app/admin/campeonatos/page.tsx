@@ -82,18 +82,21 @@ export default function CampeonatosAdmin() {
       return;
     }
 
-    const supabase = createBrowserSupabaseClient();
-
-    await supabase.from("matches").delete().eq("tournament_id", tournament.id);
-    await supabase.from("tournament_teams").delete().eq("tournament_id", tournament.id);
-    const { error } = await supabase.from("tournaments").delete().eq("id", tournament.id);
-
-    if (error) {
-      alert("Erro ao excluir campeonato: " + error.message);
-      return;
+    try {
+      const resp = await fetch("/api/admin/delete-tournament", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournamentId: tournament.id }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || "Erro ao excluir campeonato");
+        return;
+      }
+      setTournaments((prev) => prev.filter((t) => t.id !== tournament.id));
+    } catch {
+      alert("Erro de conexão ao excluir campeonato");
     }
-
-    setTournaments((prev) => prev.filter((t) => t.id !== tournament.id));
   };
 
   const filteredTournaments = useMemo(() => {

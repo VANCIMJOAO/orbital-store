@@ -93,6 +93,8 @@ export default function CadastroPage() {
     if (error) {
       if (error.message.includes("already registered")) {
         addToast("Este email ja esta cadastrado", "error");
+      } else if (error.message.includes("nome de usuário já está em uso")) {
+        addToast("Este nome de usuario ja esta em uso", "error");
       } else {
         addToast("Erro ao criar conta. Tente novamente.", "error");
       }

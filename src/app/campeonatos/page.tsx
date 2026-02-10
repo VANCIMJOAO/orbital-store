@@ -507,7 +507,7 @@ export default function CampeonatosPage() {
                 <div className="bg-[#A855F7]/10 border border-[#A855F7]/30 rounded-lg p-3 text-center mb-3">
                   <span className="text-[10px] font-mono text-[#A855F7] block">TOTAL</span>
                   <span className="font-mono text-lg text-[#F5F5DC] font-bold">
-                    R$ {Number(tournament.prize_pool).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    R$ {(Number(tournament.prize_pool) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -549,7 +549,7 @@ export default function CampeonatosPage() {
                       <span className="text-xs text-[#F5F5DC]">1° Lugar</span>
                     </div>
                     <span className="font-mono text-sm text-[#FFD700] font-bold">
-                      R$ {Number(tournament.prize_pool).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      R$ {(Number(tournament.prize_pool) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 )}

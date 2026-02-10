@@ -269,7 +269,7 @@ export default function PartidaDetalhes() {
     setVetoCurrentStep(0);
     setVetoCompleted(false);
     setVetoStarted(false);
-    fetchMatch();
+    await fetchMatch();
   };
 
   // Salvar veto no banco e carregar no servidor

@@ -79,13 +79,30 @@ export async function POST(
     await sendCommand("css_endmatch");
     log.info("css_endmatch enviado");
 
-    // 2. Aguardar o MatchZy processar o endmatch antes de carregar nova partida
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    // 2. Aguardar o MatchZy processar o endmatch com retry progressivo
+    // Tenta carregar até 3 vezes com delays crescentes (2s, 3s, 5s)
+    const delays = [2000, 3000, 5000];
+    let lastError: Error | null = null;
+    let loadCommand = "";
 
-    // 3. Carregar nova partida via URL
-    const loadCommand = `matchzy_loadmatch_url "${configUrl}"`;
-    await sendCommand(loadCommand);
-    log.info(`Comando enviado: ${loadCommand}`);
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+
+      loadCommand = `matchzy_loadmatch_url "${configUrl}"`;
+      try {
+        await sendCommand(loadCommand);
+        log.info(`Comando enviado (tentativa ${attempt + 1}): ${loadCommand}`);
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err as Error;
+        log.warn(`Tentativa ${attempt + 1} falhou, ${attempt < delays.length - 1 ? "retrying..." : "desistindo"}`);
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
 
     return NextResponse.json({
       success: true,

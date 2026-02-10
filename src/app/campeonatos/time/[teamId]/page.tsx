@@ -226,7 +226,7 @@ function TimeContent() {
                   headshots: stats.headshots,
                   totalDamage: stats.totalDamage,
                   roundsPlayed: rp,
-                  adr: stats.totalDamage / rp,
+                  adr: rp > 0 ? stats.totalDamage / rp : 0,
                   rating: stats.deaths > 0 ? stats.kills / stats.deaths : stats.kills,
                 };
               })

@@ -113,16 +113,20 @@ export default function JogadoresAdmin() {
   };
 
   const toggleAdmin = async (playerId: string, currentStatus: boolean) => {
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase
-      .from("profiles")
-      .update({ is_admin: !currentStatus })
-      .eq("id", playerId);
-
-    if (error) {
-      alert("Erro ao atualizar admin: " + error.message);
-    } else {
-      fetchPlayers();
+    try {
+      const resp = await fetch("/api/admin/toggle-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId, currentStatus }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || "Erro ao atualizar admin");
+      } else {
+        fetchPlayers();
+      }
+    } catch {
+      alert("Erro de conexão ao atualizar admin");
     }
   };
 
@@ -146,20 +150,25 @@ export default function JogadoresAdmin() {
       return;
     }
 
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        username: editForm.username,
-        steam_id: steamId || null,
-      })
-      .eq("id", editForm.id);
-
-    if (error) {
-      alert("Erro ao atualizar jogador: " + error.message);
-    } else {
-      setShowEditModal(false);
-      fetchPlayers();
+    try {
+      const resp = await fetch("/api/admin/update-player", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: editForm.id,
+          username: editForm.username,
+          steam_id: steamId || null,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(data.error || "Erro ao atualizar jogador");
+      } else {
+        setShowEditModal(false);
+        fetchPlayers();
+      }
+    } catch {
+      alert("Erro de conexão ao atualizar jogador");
     }
     setSavingEdit(false);
   };

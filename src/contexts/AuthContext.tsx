@@ -191,6 +191,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
       if (profileError) {
+        // Tratar username duplicado (race condition entre check e insert)
+        if ((profileError as any).code === "23505") {
+          return { error: new Error("Este nome de usuário já está em uso") };
+        }
         return { error: profileError as unknown as Error };
       }
     }
