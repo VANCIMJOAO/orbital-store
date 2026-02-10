@@ -1,6 +1,4 @@
 import { getAdminClient } from './supabase-client';
-import { v4 as uuidv4 } from 'crypto';
-
 // Use crypto.randomUUID for deterministic-ish test IDs
 function testId() {
   return crypto.randomUUID();
