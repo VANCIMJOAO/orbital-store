@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { useToast } from "@/contexts/ToastContext";
 import {
   CS2_MAP_POOL,
   MAP_DISPLAY_NAMES,
@@ -91,6 +92,7 @@ const mapIcons: Record<string, string> = {
 export default function PartidaDetalhes() {
   const params = useParams();
   const router = useRouter();
+  const { addToast } = useToast();
   const matchId = params.id as string;
 
   const [match, setMatch] = useState<Match | null>(null);
@@ -179,7 +181,7 @@ export default function PartidaDetalhes() {
 
   // Clicar em um mapa durante o veto
   const handleMapClick = (map: string) => {
-    if (vetoCompleted) return;
+    if (vetoCompleted || vetoSaving) return;
     const sequence = getVetoSequence();
     if (vetoCurrentStep >= sequence.length) return;
 
@@ -292,7 +294,7 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      alert(`Erro ao salvar veto: ${error.message}`);
+      addToast(`Erro ao salvar veto: ${error.message}`, "error");
       setVetoSaving(false);
       return;
     }
@@ -305,12 +307,12 @@ export default function PartidaDetalhes() {
       const data = await resp.json();
 
       if (!resp.ok) {
-        alert(`Veto salvo! Erro ao carregar no servidor: ${data.error}`);
+        addToast(`Veto salvo! Erro ao carregar no servidor: ${data.error}`, "warning");
       } else {
-        alert("Veto completo! Partida carregada no servidor. Aguardando jogadores...");
+        addToast("Veto completo! Partida carregada no servidor.", "success");
       }
     } catch {
-      alert("Veto salvo! Erro de conexao com o servidor.");
+      addToast("Veto salvo! Erro de conexao com o servidor.", "warning");
     }
 
     setVetoSaving(false);
@@ -329,12 +331,12 @@ export default function PartidaDetalhes() {
       const data = await resp.json();
 
       if (!resp.ok) {
-        alert(`Erro: ${data.error}`);
+        addToast(`Erro: ${data.error}`, "error");
       } else {
-        alert("Partida carregada no servidor! Aguardando jogadores...");
+        addToast("Partida carregada no servidor! Aguardando jogadores...", "success");
       }
     } catch {
-      alert("Erro ao conectar com o servidor");
+      addToast("Erro ao conectar com o servidor", "error");
     }
 
     setLoadingServer(false);
@@ -358,7 +360,7 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      alert(`Erro: ${error.message}`);
+      addToast(`Erro: ${error.message}`, "error");
     } else {
       if (match.scheduled_at) {
         const scheduledTime = new Date(match.scheduled_at);
@@ -399,108 +401,39 @@ export default function PartidaDetalhes() {
   const handleFinishMatch = async () => {
     if (!match) return;
     if (finishScores.team1 === finishScores.team2) {
-      alert("A partida nao pode terminar empatada!");
+      addToast("A partida nao pode terminar empatada!", "error");
       return;
     }
     if (!match.team1_id || !match.team2_id) {
-      alert("Partida sem times definidos!");
+      addToast("Partida sem times definidos!", "error");
       return;
     }
 
     setSaving(true);
-    const supabase = createBrowserSupabaseClient();
-    const winnerId = finishScores.team1 > finishScores.team2 ? match.team1_id : match.team2_id;
-    const loserId = finishScores.team1 > finishScores.team2 ? match.team2_id : match.team1_id;
 
-    const { error } = await supabase
-      .from("matches")
-      .update({
-        team1_score: finishScores.team1,
-        team2_score: finishScores.team2,
-        status: "finished",
-        match_phase: "finished",
-        is_live: false,
-        finished_at: new Date().toISOString(),
-        winner_id: winnerId,
-      })
-      .eq("id", matchId);
+    try {
+      const resp = await fetch(`/api/matches/${matchId}/finish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          team1_score: finishScores.team1,
+          team2_score: finishScores.team2,
+        }),
+      });
+      const data = await resp.json();
 
-    if (error) {
-      alert(`Erro: ${error.message}`);
-    } else {
-      await advanceTeamsInBracket(supabase, match.tournament_id, match.round || "", winnerId, loserId);
-      setShowFinishModal(false);
-      fetchMatch();
+      if (!resp.ok) {
+        addToast(`Erro: ${data.error}`, "error");
+      } else {
+        setShowFinishModal(false);
+        addToast("Partida finalizada com sucesso!", "success");
+        fetchMatch();
+      }
+    } catch {
+      addToast("Erro ao finalizar partida", "error");
     }
 
     setSaving(false);
-  };
-
-  const advanceTeamsInBracket = async (
-    supabase: ReturnType<typeof createBrowserSupabaseClient>,
-    tournamentId: string,
-    currentRound: string,
-    winnerId: string,
-    loserId: string
-  ) => {
-    const bracketAdvancement: Record<string, { winnerGoesTo: string; loserGoesTo?: string; winnerPosition: "team1" | "team2"; loserPosition?: "team1" | "team2" }> = {
-      winner_quarter_1: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", winnerPosition: "team1", loserPosition: "team1" },
-      winner_quarter_2: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", winnerPosition: "team2", loserPosition: "team2" },
-      winner_quarter_3: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", winnerPosition: "team1", loserPosition: "team1" },
-      winner_quarter_4: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", winnerPosition: "team2", loserPosition: "team2" },
-      winner_semi_1: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_1", winnerPosition: "team1", loserPosition: "team1" },
-      winner_semi_2: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_2", winnerPosition: "team2", loserPosition: "team1" },
-      winner_final: { winnerGoesTo: "grand_final", loserGoesTo: "loser_final", winnerPosition: "team1", loserPosition: "team1" },
-      loser_round1_1: { winnerGoesTo: "loser_round2_1", winnerPosition: "team2" },
-      loser_round1_2: { winnerGoesTo: "loser_round2_2", winnerPosition: "team2" },
-      loser_round2_1: { winnerGoesTo: "loser_semi", winnerPosition: "team1" },
-      loser_round2_2: { winnerGoesTo: "loser_semi", winnerPosition: "team2" },
-      loser_semi: { winnerGoesTo: "loser_final", winnerPosition: "team2" },
-      loser_final: { winnerGoesTo: "grand_final", winnerPosition: "team2" },
-    };
-
-    const advancement = bracketAdvancement[currentRound];
-    if (!advancement) return;
-
-    if (advancement.winnerGoesTo) {
-      const winnerField = advancement.winnerPosition === "team1" ? "team1_id" : "team2_id";
-      await supabase
-        .from("matches")
-        .update({ [winnerField]: winnerId })
-        .eq("tournament_id", tournamentId)
-        .eq("round", advancement.winnerGoesTo);
-
-      const { data: destMatch } = await supabase
-        .from("matches")
-        .select("*")
-        .eq("tournament_id", tournamentId)
-        .eq("round", advancement.winnerGoesTo)
-        .single();
-
-      if (destMatch && destMatch.status === "pending" && destMatch.team1_id !== destMatch.team2_id) {
-        await supabase.from("matches").update({ status: "scheduled" }).eq("id", destMatch.id);
-      }
-    }
-
-    if (advancement.loserGoesTo && advancement.loserPosition) {
-      const loserField = advancement.loserPosition === "team1" ? "team1_id" : "team2_id";
-      await supabase
-        .from("matches")
-        .update({ [loserField]: loserId })
-        .eq("tournament_id", tournamentId)
-        .eq("round", advancement.loserGoesTo);
-
-      const { data: destMatch } = await supabase
-        .from("matches")
-        .select("*")
-        .eq("tournament_id", tournamentId)
-        .eq("round", advancement.loserGoesTo)
-        .single();
-
-      if (destMatch && destMatch.status === "pending" && destMatch.team1_id !== destMatch.team2_id) {
-        await supabase.from("matches").update({ status: "scheduled" }).eq("id", destMatch.id);
-      }
-    }
   };
 
   const handleUpdateScore = async (team1Score: number, team2Score: number) => {
@@ -525,13 +458,13 @@ export default function PartidaDetalhes() {
       const data = await resp.json();
 
       if (!resp.ok) {
-        alert(`Erro: ${data.error}`);
+        addToast(`Erro: ${data.error}`, "error");
       } else {
-        alert(`Round ${restoreRound} restaurado com sucesso!`);
+        addToast(`Round ${restoreRound} restaurado com sucesso!`, "success");
         setShowRestoreModal(false);
       }
     } catch {
-      alert("Erro ao conectar com o servidor");
+      addToast("Erro ao conectar com o servidor", "error");
     }
 
     setRestoring(false);
@@ -551,7 +484,7 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      alert(`Erro: ${error.message}`);
+      addToast(`Erro: ${error.message}`, "error");
     } else {
       fetchMatch();
     }
@@ -575,8 +508,9 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      alert(`Erro: ${error.message}`);
+      addToast(`Erro: ${error.message}`, "error");
     } else {
+      addToast("Partida cancelada.", "warning");
       fetchMatch();
     }
     setSaving(false);
@@ -592,7 +526,9 @@ export default function PartidaDetalhes() {
       .eq("id", matchId);
 
     if (error) {
-      alert(`Erro: ${error.message}`);
+      addToast(`Erro: ${error.message}`, "error");
+    } else {
+      addToast("Stream salva!", "success");
     }
     setSavingStream(false);
   };

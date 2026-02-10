@@ -225,6 +225,10 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
 
         // Auto-reconnect: se nunca conectou, parar após maxReconnectAttempts tentativas
         if (autoReconnect && (wasConnected || failCountRef.current < maxReconnectAttempts)) {
+          // Limpar timeout anterior para evitar múltiplos reconnects simultâneos
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+          }
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, reconnectInterval);
@@ -341,7 +345,7 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
       disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId]); // Reconectar se matchId mudar
+  }, [matchId, serverUrl]); // Reconectar se matchId ou serverUrl mudar
 
   // Calcular valores derivados para fácil acesso
   const team1 = matchZyState?.team1 || matchState?.team1 || null;
@@ -376,6 +380,8 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
  */
 export function useGOTVMatches(serverUrl?: string) {
   const baseUrl = serverUrl || process.env.NEXT_PUBLIC_GOTV_SERVER_URL || 'http://localhost:8080';
+  const baseUrlRef = useRef(baseUrl);
+  baseUrlRef.current = baseUrl;
 
   const [matches, setMatches] = useState<ActiveMatchInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -387,11 +393,11 @@ export function useGOTVMatches(serverUrl?: string) {
       setIsLoading(true);
 
       // Construir URL HTTP a partir da URL WebSocket
-      let httpUrl = baseUrl;
-      if (baseUrl.startsWith('wss://')) {
-        httpUrl = baseUrl.replace('wss://', 'https://');
-      } else if (baseUrl.startsWith('ws://')) {
-        httpUrl = baseUrl.replace('ws://', 'http://');
+      let httpUrl = baseUrlRef.current;
+      if (httpUrl.startsWith('wss://')) {
+        httpUrl = httpUrl.replace('wss://', 'https://');
+      } else if (httpUrl.startsWith('ws://')) {
+        httpUrl = httpUrl.replace('ws://', 'http://');
       }
 
       const response = await fetch(`${httpUrl}/api/matches`, {
@@ -416,7 +422,7 @@ export function useGOTVMatches(serverUrl?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [baseUrl]);
+  }, []); // Estável - usa ref para baseUrl
 
   useEffect(() => {
     fetchMatches();
@@ -436,6 +442,8 @@ export function useGOTVMatches(serverUrl?: string) {
  */
 export function useGOTVMatchState(matchId: string, serverUrl?: string) {
   const baseUrl = serverUrl || process.env.NEXT_PUBLIC_GOTV_SERVER_URL || 'http://localhost:8080';
+  const baseUrlRef = useRef(baseUrl);
+  baseUrlRef.current = baseUrl;
 
   const [matchState, setMatchState] = useState<GOTVMatchState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -448,11 +456,11 @@ export function useGOTVMatchState(matchId: string, serverUrl?: string) {
       setIsLoading(true);
 
       // Construir URL HTTP a partir da URL WebSocket
-      let httpUrl = baseUrl;
-      if (baseUrl.startsWith('wss://')) {
-        httpUrl = baseUrl.replace('wss://', 'https://');
-      } else if (baseUrl.startsWith('ws://')) {
-        httpUrl = baseUrl.replace('ws://', 'http://');
+      let httpUrl = baseUrlRef.current;
+      if (httpUrl.startsWith('wss://')) {
+        httpUrl = httpUrl.replace('wss://', 'https://');
+      } else if (httpUrl.startsWith('ws://')) {
+        httpUrl = httpUrl.replace('ws://', 'http://');
       }
 
       const response = await fetch(`${httpUrl}/api/match/${matchId}`, {
@@ -477,7 +485,7 @@ export function useGOTVMatchState(matchId: string, serverUrl?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [matchId, baseUrl]);
+  }, [matchId]); // Estável - usa ref para baseUrl
 
   useEffect(() => {
     fetchMatchState();

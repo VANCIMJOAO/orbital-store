@@ -147,7 +147,7 @@ export async function GET(
     // MatchZy exige matchid como inteiro (Int32) - converter UUID para número
     // Usa os primeiros 8 hex do UUID e garante que cabe em Int32 (max 2147483647)
     const rawNumeric = parseInt(matchId.replace(/-/g, '').substring(0, 8), 16);
-    const numericMatchId = rawNumeric % 2147483647;
+    const numericMatchId = Math.abs(rawNumeric % 2147483647) || 1;
 
     // Montar configuração do MatchZy
     const config: MatchZyConfig = {

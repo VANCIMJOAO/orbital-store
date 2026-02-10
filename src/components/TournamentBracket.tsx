@@ -96,7 +96,7 @@ function MatchCard({ match, onClick }: { match: Match; onClick?: () => void }) {
           {team1Known ? match.team1?.name : "TBD"}
         </span>
         <span className={`font-mono text-sm font-bold ${getTeamStyle(match.team1_id)}`}>
-          {bothTBD ? "-" : match.team1_score}
+          {team1Known ? match.team1_score : "-"}
         </span>
       </div>
 
@@ -111,7 +111,7 @@ function MatchCard({ match, onClick }: { match: Match; onClick?: () => void }) {
           {team2Known ? match.team2?.name : "TBD"}
         </span>
         <span className={`font-mono text-sm font-bold ${getTeamStyle(match.team2_id)}`}>
-          {bothTBD ? "-" : match.team2_score}
+          {team2Known ? match.team2_score : "-"}
         </span>
       </div>
     </div>

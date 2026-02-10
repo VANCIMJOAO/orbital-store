@@ -211,7 +211,7 @@ export default function CampeonatosPage() {
               }))
               .sort((a, b) => {
                 const diff = b.kd - a.kd;
-                if (Math.abs(diff) < 0.001) return Math.random() - 0.5; // Empate = aleatorio
+                if (Math.abs(diff) < 0.001) return b.kills - a.kills || a.id.localeCompare(b.id);
                 return diff;
               })
               .slice(0, 5);
@@ -277,8 +277,12 @@ export default function CampeonatosPage() {
                 .eq("is_active", true);
 
               if (teamPlayersData && teamPlayersData.length > 0) {
-                // Sem stats, ordenar aleatoriamente
-                const shuffled = [...teamPlayersData].sort(() => Math.random() - 0.5).slice(0, 5);
+                // Sem stats, ordenar por level (desc) e depois created_at
+                const shuffled = [...teamPlayersData].sort((a, b) => {
+                  const profA = a.profiles as unknown as { level: number } | null;
+                  const profB = b.profiles as unknown as { level: number } | null;
+                  return (profB?.level || 0) - (profA?.level || 0);
+                }).slice(0, 5);
                 const topPlayersResult: TopPlayer[] = shuffled
                   .filter((tp) => tp.profiles)
                   .map((tp) => {

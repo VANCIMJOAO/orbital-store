@@ -84,6 +84,7 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
         map_name,
         team1_score,
         team2_score,
+        winner_id,
         match_phase,
         scheduled_at,
         team1:teams!matches_team1_id_fkey(id, name, tag, logo_url),
@@ -131,15 +132,23 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
     if (stat.rating) ratingSum += Number(stat.rating);
   });
 
-  // Contar vitórias (precisa comparar com o resultado da partida)
+  // Contar vitórias usando winner_id (fonte correta)
   matchHistory?.forEach((mh) => {
     const match = mh.match as any;
     if (match) {
       const playerTeamId = mh.team_id;
-      const isTeam1 = playerTeamId === (match.team1 as any)?.id;
-      const team1Won = (match.team1_score || 0) > (match.team2_score || 0);
-      if ((isTeam1 && team1Won) || (!isTeam1 && !team1Won)) {
-        totalWins++;
+      if (match.winner_id) {
+        // Usar winner_id quando disponível (fonte mais confiável)
+        if (match.winner_id === playerTeamId) {
+          totalWins++;
+        }
+      } else {
+        // Fallback: comparar scores
+        const isTeam1 = playerTeamId === (match.team1 as any)?.id;
+        const team1Won = (match.team1_score || 0) > (match.team2_score || 0);
+        if ((isTeam1 && team1Won) || (!isTeam1 && !team1Won)) {
+          totalWins++;
+        }
       }
     }
   });
@@ -164,8 +173,10 @@ async function fetchPlayerStats(profile: Database['public']['Tables']['profiles'
     const team1 = match.team1 as any;
     const team2 = match.team2 as any;
     const isTeam1 = playerTeamId === team1?.id;
-    const team1Won = (match.team1_score || 0) > (match.team2_score || 0);
-    const won = (isTeam1 && team1Won) || (!isTeam1 && !team1Won);
+    const won = match.winner_id
+      ? match.winner_id === playerTeamId
+      : ((isTeam1 && (match.team1_score || 0) > (match.team2_score || 0)) ||
+         (!isTeam1 && (match.team2_score || 0) > (match.team1_score || 0)));
 
     return {
       matchId: match.id,

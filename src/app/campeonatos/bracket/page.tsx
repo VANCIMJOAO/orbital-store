@@ -96,7 +96,10 @@ function BracketContent() {
           ) : (
             <TournamentBracket
               matches={matches}
-              onMatchClick={(match) => router.push(`/campeonatos/partida/${match.id}`)}
+              onMatchClick={(match) => {
+                if (!match.team1_id && !match.team2_id) return;
+                router.push(`/campeonatos/partida/${match.id}`);
+              }}
             />
           )}
         </div>

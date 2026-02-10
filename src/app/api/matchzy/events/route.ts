@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createLogger } from "@/lib/logger";
+import { advanceTeamsInBracket } from "@/lib/bracket";
 
 const log = createLogger("matchzy-webhook");
 
@@ -10,8 +11,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Token de autenticação para webhooks
-const WEBHOOK_SECRET = process.env.MATCHZY_WEBHOOK_SECRET || "orbital_secret_token";
+// Token de autenticação para webhooks (obrigatório em produção)
+const WEBHOOK_SECRET = process.env.MATCHZY_WEBHOOK_SECRET;
+if (!WEBHOOK_SECRET) {
+  console.error("[FATAL] MATCHZY_WEBHOOK_SECRET não definido. Webhooks serão rejeitados.");
+}
 
 // ============================================================
 // Tipos do MatchZy (baseados em Events.cs e MatchData.cs)
@@ -460,6 +464,11 @@ async function updateProfileAggregateStats(matchId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!WEBHOOK_SECRET) {
+      log.error("[MatchZy Webhook] MATCHZY_WEBHOOK_SECRET não configurado");
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    }
+
     const authHeader = request.headers.get("Authorization");
     if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
       log.info("[MatchZy Webhook] Unauthorized request");
@@ -636,12 +645,19 @@ async function handleRoundEnd(event: MatchZyEvent) {
 
   const { error: roundError } = await supabase
     .from("match_rounds")
-    .insert(roundData);
+    .upsert(roundData, { onConflict: "match_id,round_number" });
 
   if (roundError) {
-    // Se round já existe (duplicata), ignorar
-    if (roundError.code !== "23505") {
-      log.error("Error inserting match_round:", roundError);
+    // Fallback: se constraint não existe, tentar insert ignorando duplicata
+    if (roundError.code === "42P10" || roundError.message?.includes("constraint")) {
+      const { error: insertError } = await supabase
+        .from("match_rounds")
+        .insert(roundData);
+      if (insertError && insertError.code !== "23505") {
+        log.error("Error inserting match_round:", insertError);
+      }
+    } else {
+      log.error("Error upserting match_round:", roundError);
     }
   }
 
@@ -865,7 +881,7 @@ async function handleSeriesEnd(event: MatchZyEvent) {
 
   // Avançar times no bracket
   if (match.tournament_id && match.round) {
-    await advanceTeamsInBracket(match.tournament_id, match.round, winnerId!, loserId!);
+    await advanceTeamsInBracket(supabase, match.tournament_id, match.round, winnerId!, loserId!);
   }
 }
 
@@ -938,89 +954,6 @@ async function propagateDelay(tournamentId: string, currentMatchId: string, dela
 
       log.info(`Adjusted match ${match.id} time by ${adjustedDelay} minutes`);
     }
-  }
-}
-
-async function advanceTeamsInBracket(
-  tournamentId: string,
-  currentRound: string,
-  winnerId: string,
-  loserId: string
-) {
-  const bracketAdvancement: Record<string, { winnerGoesTo: string; loserGoesTo?: string; winnerPosition: "team1" | "team2"; loserPosition?: "team1" | "team2" }> = {
-    winner_quarter_1: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", winnerPosition: "team1", loserPosition: "team1" },
-    winner_quarter_2: { winnerGoesTo: "winner_semi_1", loserGoesTo: "loser_round1_1", winnerPosition: "team2", loserPosition: "team2" },
-    winner_quarter_3: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", winnerPosition: "team1", loserPosition: "team1" },
-    winner_quarter_4: { winnerGoesTo: "winner_semi_2", loserGoesTo: "loser_round1_2", winnerPosition: "team2", loserPosition: "team2" },
-    winner_semi_1: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_1", winnerPosition: "team1", loserPosition: "team1" },
-    winner_semi_2: { winnerGoesTo: "winner_final", loserGoesTo: "loser_round2_2", winnerPosition: "team2", loserPosition: "team1" },
-    winner_final: { winnerGoesTo: "grand_final", loserGoesTo: "loser_final", winnerPosition: "team1", loserPosition: "team1" },
-    loser_round1_1: { winnerGoesTo: "loser_round2_1", winnerPosition: "team2" },
-    loser_round1_2: { winnerGoesTo: "loser_round2_2", winnerPosition: "team2" },
-    loser_round2_1: { winnerGoesTo: "loser_semi", winnerPosition: "team1" },
-    loser_round2_2: { winnerGoesTo: "loser_semi", winnerPosition: "team2" },
-    loser_semi: { winnerGoesTo: "loser_final", winnerPosition: "team2" },
-    loser_final: { winnerGoesTo: "grand_final", winnerPosition: "team2" },
-  };
-
-  const advancement = bracketAdvancement[currentRound];
-  if (!advancement) {
-    log.info("No advancement mapping for round:", currentRound);
-    return;
-  }
-
-  if (advancement.winnerGoesTo) {
-    const winnerField = advancement.winnerPosition === "team1" ? "team1_id" : "team2_id";
-    const { error: winnerError } = await supabase
-      .from("matches")
-      .update({ [winnerField]: winnerId })
-      .eq("tournament_id", tournamentId)
-      .eq("round", advancement.winnerGoesTo);
-
-    if (winnerError) {
-      log.error("Error advancing winner:", winnerError);
-    } else {
-      log.info(`Advanced winner ${winnerId} to ${advancement.winnerGoesTo} as ${advancement.winnerPosition}`);
-    }
-
-    await checkAndActivateMatch(tournamentId, advancement.winnerGoesTo);
-  }
-
-  if (advancement.loserGoesTo && advancement.loserPosition) {
-    const loserField = advancement.loserPosition === "team1" ? "team1_id" : "team2_id";
-    const { error: loserError } = await supabase
-      .from("matches")
-      .update({ [loserField]: loserId })
-      .eq("tournament_id", tournamentId)
-      .eq("round", advancement.loserGoesTo);
-
-    if (loserError) {
-      log.error("Error sending loser to bracket:", loserError);
-    } else {
-      log.info(`Sent loser ${loserId} to ${advancement.loserGoesTo} as ${advancement.loserPosition}`);
-    }
-
-    await checkAndActivateMatch(tournamentId, advancement.loserGoesTo);
-  }
-}
-
-async function checkAndActivateMatch(tournamentId: string, round: string) {
-  const { data: match, error } = await supabase
-    .from("matches")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .eq("round", round)
-    .single();
-
-  if (error || !match) return;
-
-  if (match.status === "pending" && match.team1_id && match.team2_id && match.team1_id !== match.team2_id) {
-    await supabase
-      .from("matches")
-      .update({ status: "scheduled" })
-      .eq("id", match.id);
-
-    log.info(`Activated match ${match.id} (${round}) - both teams ready`);
   }
 }
 
