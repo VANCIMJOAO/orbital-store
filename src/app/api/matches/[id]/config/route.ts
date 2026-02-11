@@ -71,6 +71,11 @@ export async function GET(
       );
     }
 
+    // Se já tem matchzy_config salva, retornar ela (permite edição via PATCH/Supabase)
+    if (match.matchzy_config) {
+      return NextResponse.json(match.matchzy_config);
+    }
+
     // Buscar jogadores do time 1
     const { data: team1Players, error: team1Error } = await supabase
       .from('team_players')
