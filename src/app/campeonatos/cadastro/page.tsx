@@ -261,11 +261,22 @@ export default function CadastroPage() {
                       id="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-[#1a1a2e]/50 border border-[#27272A] rounded-xl pl-12 pr-4 py-3 text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:border-[#A855F7]/50 focus:bg-[#1a1a2e] transition-all"
+                      className={`w-full bg-[#1a1a2e]/50 border rounded-xl pl-12 pr-4 py-3 text-[#F5F5DC] placeholder-[#52525B] focus:outline-none focus:bg-[#1a1a2e] transition-all ${
+                        email && !validateEmail(email).isValid
+                          ? "border-[#ef4444]/50 focus:border-[#ef4444]/70"
+                          : email && validateEmail(email).isValid
+                          ? "border-[#22c55e]/50 focus:border-[#22c55e]/70"
+                          : "border-[#27272A] focus:border-[#A855F7]/50"
+                      }`}
                       placeholder="seu@email.com"
                       required
                     />
                   </div>
+                  {email && !validateEmail(email).isValid && (
+                    <p className="text-[10px] text-[#ef4444] font-mono">
+                      {validateEmail(email).error}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
               size: item.size,
             },
           },
-          unit_amount: Math.round(item.price * 100), // Stripe expects cents
+          unit_amount: Math.round(item.price), // Price already in cents from DB
         },
         quantity: item.quantity,
       })

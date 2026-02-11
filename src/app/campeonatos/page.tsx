@@ -345,7 +345,7 @@ export default function CampeonatosPage() {
       {/* Container Principal - abaixo do menu fixo */}
       <div className="flex flex-1 pt-16">
         {/* Sidebar Esquerdo - Informações */}
-        <aside className="fixed left-0 top-16 bottom-0 w-64 bg-[#0f0f15] border-r border-[#A855F7]/20 overflow-y-auto">
+        <aside className="hidden lg:block fixed left-0 top-16 bottom-0 w-64 bg-[#0f0f15] border-r border-[#A855F7]/20 overflow-y-auto">
           {/* Status dos Times no Bracket */}
           <div className="border-b border-[#A855F7]/20">
             <div className="p-4 bg-[#12121a]">
@@ -605,7 +605,7 @@ export default function CampeonatosPage() {
         </aside>
 
         {/* Conteúdo Central */}
-        <main className="flex-1 ml-64 mr-72 min-h-[calc(100vh-4rem)] bg-[#0A0A0A]">
+        <main className="flex-1 lg:ml-64 lg:mr-72 min-h-[calc(100vh-4rem)] bg-[#0A0A0A]">
           {/* Banner do Campeonato */}
           <div className="relative w-full h-[280px]">
             {tournament?.banner_url ? (
@@ -686,7 +686,7 @@ export default function CampeonatosPage() {
                     </div>
 
                     {/* Stats do Torneio */}
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="bg-[#12121a] p-4 rounded-lg border border-[#27272A] text-center">
                         <span className="text-2xl font-display text-[#A855F7]">
                           {allMatches.filter(m => m.status === "finished").length}
@@ -729,36 +729,36 @@ export default function CampeonatosPage() {
                         </div>
                         <div className="flex items-center justify-between">
                           {/* Time 1 */}
-                          <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden">
+                          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                            <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {liveMatch.team1?.logo_url ? (
-                                <img src={liveMatch.team1.logo_url} alt={liveMatch.team1.name} className="w-12 h-12 object-contain" />
+                                <img src={liveMatch.team1.logo_url} alt={liveMatch.team1.name} className="w-8 h-8 sm:w-12 sm:h-12 object-contain" />
                               ) : (
-                                <span className="text-sm font-mono text-[#A1A1AA]">{liveMatch.team1?.tag}</span>
+                                <span className="text-xs sm:text-sm font-mono text-[#A1A1AA]">{liveMatch.team1?.tag}</span>
                               )}
                             </div>
-                            <div className="text-left">
-                              <span className="font-display text-xl text-[#F5F5DC] block">{liveMatch.team1?.name}</span>
-                              <span className="text-xs font-mono text-[#A1A1AA]">{liveMatch.team1?.tag}</span>
+                            <div className="text-left min-w-0">
+                              <span className="font-display text-sm sm:text-xl text-[#F5F5DC] block truncate">{liveMatch.team1?.name}</span>
+                              <span className="text-[10px] sm:text-xs font-mono text-[#A1A1AA] hidden sm:block">{liveMatch.team1?.tag}</span>
                             </div>
                           </div>
                           {/* Placar */}
-                          <div className="flex items-center gap-4">
-                            <span className="text-4xl font-display text-[#F5F5DC]">{liveMatch.team1_score}</span>
-                            <span className="text-2xl text-[#52525B]">:</span>
-                            <span className="text-4xl font-display text-[#F5F5DC]">{liveMatch.team2_score}</span>
+                          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 px-2">
+                            <span className="text-2xl sm:text-4xl font-display text-[#F5F5DC]">{liveMatch.team1_score}</span>
+                            <span className="text-lg sm:text-2xl text-[#52525B]">:</span>
+                            <span className="text-2xl sm:text-4xl font-display text-[#F5F5DC]">{liveMatch.team2_score}</span>
                           </div>
                           {/* Time 2 */}
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <span className="font-display text-xl text-[#F5F5DC] block">{liveMatch.team2?.name}</span>
-                              <span className="text-xs font-mono text-[#A1A1AA]">{liveMatch.team2?.tag}</span>
+                          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                            <div className="text-right min-w-0">
+                              <span className="font-display text-sm sm:text-xl text-[#F5F5DC] block truncate">{liveMatch.team2?.name}</span>
+                              <span className="text-[10px] sm:text-xs font-mono text-[#A1A1AA] hidden sm:block">{liveMatch.team2?.tag}</span>
                             </div>
-                            <div className="w-16 h-16 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden">
+                            <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {liveMatch.team2?.logo_url ? (
-                                <img src={liveMatch.team2.logo_url} alt={liveMatch.team2.name} className="w-12 h-12 object-contain" />
+                                <img src={liveMatch.team2.logo_url} alt={liveMatch.team2.name} className="w-8 h-8 sm:w-12 sm:h-12 object-contain" />
                               ) : (
-                                <span className="text-sm font-mono text-[#A1A1AA]">{liveMatch.team2?.tag}</span>
+                                <span className="text-xs sm:text-sm font-mono text-[#A1A1AA]">{liveMatch.team2?.tag}</span>
                               )}
                             </div>
                           </div>
@@ -792,20 +792,20 @@ export default function CampeonatosPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             {/* Time 1 */}
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden">
+                            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {nextMatch.team1?.logo_url ? (
-                                  <img src={nextMatch.team1.logo_url} alt={nextMatch.team1.name} className="w-10 h-10 object-contain" />
+                                  <img src={nextMatch.team1.logo_url} alt={nextMatch.team1.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
                                 ) : (
                                   <span className="text-xs font-mono text-[#A1A1AA]">{nextMatch.team1?.tag}</span>
                                 )}
                               </div>
-                              <span className="font-display text-lg text-[#F5F5DC]">{nextMatch.team1?.name}</span>
+                              <span className="font-display text-sm sm:text-lg text-[#F5F5DC] truncate">{nextMatch.team1?.name}</span>
                             </div>
                             {/* VS */}
-                            <div className="text-center">
-                              <span className="text-2xl font-display text-[#A855F7]">VS</span>
-                              <span className="text-xs font-mono text-[#A1A1AA] block mt-1">
+                            <div className="text-center flex-shrink-0 px-2">
+                              <span className="text-xl sm:text-2xl font-display text-[#A855F7]">VS</span>
+                              <span className="text-[10px] sm:text-xs font-mono text-[#A1A1AA] block mt-1">
                                 {nextMatch.scheduled_at ? new Date(nextMatch.scheduled_at).toLocaleString("pt-BR", {
                                   day: "2-digit",
                                   month: "2-digit",
@@ -815,11 +815,11 @@ export default function CampeonatosPage() {
                               </span>
                             </div>
                             {/* Time 2 */}
-                            <div className="flex items-center gap-3">
-                              <span className="font-display text-lg text-[#F5F5DC]">{nextMatch.team2?.name}</span>
-                              <div className="w-12 h-12 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden">
+                            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                              <span className="font-display text-sm sm:text-lg text-[#F5F5DC] truncate">{nextMatch.team2?.name}</span>
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {nextMatch.team2?.logo_url ? (
-                                  <img src={nextMatch.team2.logo_url} alt={nextMatch.team2.name} className="w-10 h-10 object-contain" />
+                                  <img src={nextMatch.team2.logo_url} alt={nextMatch.team2.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
                                 ) : (
                                   <span className="text-xs font-mono text-[#A1A1AA]">{nextMatch.team2?.tag}</span>
                                 )}
@@ -886,11 +886,260 @@ export default function CampeonatosPage() {
                 </p>
               </div>
             )}
+
+            {/* Mobile: Seções dos sidebars inline */}
+            <div className="lg:hidden space-y-6 mt-6">
+              {/* Partidas - Mobile */}
+              <div className="bg-[#0f0f15] rounded-lg border border-[#A855F7]/20">
+                <div className="p-4 border-b border-[#A855F7]/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-mono text-[#F5F5DC] text-sm tracking-wider">
+                      PARTIDAS
+                    </h3>
+                    {allMatches.some(m => m.status === "live") && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-[10px] font-mono text-red-500">AO VIVO</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setActiveTab("ao-vivo")}
+                      className={`flex-1 px-2 py-1.5 rounded text-[10px] font-mono transition-colors ${
+                        activeTab === "ao-vivo"
+                          ? "bg-red-500/20 text-red-500 border border-red-500/50"
+                          : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
+                      }`}
+                    >
+                      AO VIVO ({allMatches.filter(m => m.status === "live").length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("proximas")}
+                      className={`flex-1 px-2 py-1.5 rounded text-[10px] font-mono transition-colors ${
+                        activeTab === "proximas"
+                          ? "bg-[#A855F7]/20 text-[#A855F7] border border-[#A855F7]/50"
+                          : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
+                      }`}
+                    >
+                      PRÓXIMAS
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("finalizadas")}
+                      className={`flex-1 px-2 py-1.5 rounded text-[10px] font-mono transition-colors ${
+                        activeTab === "finalizadas"
+                          ? "bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/50"
+                          : "bg-[#27272A] text-[#A1A1AA] hover:bg-[#3f3f46]"
+                      }`}
+                    >
+                      RESULTADOS
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2 space-y-2">
+                  {(() => {
+                    const filteredMatches = allMatches.filter(m => {
+                      if (activeTab === "ao-vivo") return m.status === "live";
+                      if (activeTab === "proximas") return m.status === "scheduled" && m.team1 && m.team2;
+                      if (activeTab === "finalizadas") return m.status === "finished";
+                      return false;
+                    }).sort((a, b) => {
+                      if (activeTab === "finalizadas") {
+                        return new Date(b.finished_at || 0).getTime() - new Date(a.finished_at || 0).getTime();
+                      }
+                      return new Date(a.scheduled_at || 0).getTime() - new Date(b.scheduled_at || 0).getTime();
+                    });
+
+                    if (filteredMatches.length === 0) {
+                      return (
+                        <div className="text-center py-6">
+                          <p className="text-xs text-[#A1A1AA]">
+                            {activeTab === "ao-vivo" && "Nenhuma partida ao vivo"}
+                            {activeTab === "proximas" && "Nenhuma partida agendada"}
+                            {activeTab === "finalizadas" && "Nenhum resultado ainda"}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return filteredMatches.slice(0, 5).map((partida) => (
+                      <div
+                        key={`mobile-${partida.id}`}
+                        onClick={() => router.push(`/campeonatos/partida/${partida.id}`)}
+                        className={`bg-[#12121a] border rounded-lg p-3 transition-all cursor-pointer ${
+                          partida.status === "live"
+                            ? "border-red-500/50"
+                            : partida.status === "finished"
+                            ? "border-[#22c55e]/30"
+                            : "border-[#27272A]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[10px] font-mono ${
+                            partida.status === "live" ? "text-red-500" :
+                            partida.status === "finished" ? "text-[#22c55e]" : "text-[#A1A1AA]"
+                          }`}>
+                            {partida.status === "live" ? "AO VIVO" :
+                             partida.status === "finished" ? "FINAL" :
+                             formatMatchTime(partida.scheduled_at)}
+                          </span>
+                          <span className="text-[8px] font-mono text-[#A855F7]/70 px-1.5 py-0.5 bg-[#A855F7]/10 rounded">
+                            {getRoundLabel(partida.round)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-body text-[#F5F5DC]">{partida.team1?.name || "TBD"}</span>
+                          <span className="font-mono text-sm text-[#F5F5DC]">
+                            {partida.status !== "scheduled" ? `${partida.team1_score} - ${partida.team2_score}` : "vs"}
+                          </span>
+                          <span className="text-xs font-body text-[#F5F5DC]">{partida.team2?.name || "TBD"}</span>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <div className="p-3 border-t border-[#A855F7]/20">
+                  <Link
+                    href="/campeonatos/partidas"
+                    className="block text-center font-mono text-xs text-[#A855F7] hover:text-[#C084FC] transition-colors"
+                  >
+                    VER TODAS AS PARTIDAS →
+                  </Link>
+                </div>
+              </div>
+
+              {/* Ranking dos Times - Mobile */}
+              <div className="bg-[#0f0f15] rounded-lg border border-[#A855F7]/20">
+                <div className="p-4 bg-[#12121a] rounded-t-lg">
+                  <h3 className="font-mono text-[#F5F5DC] text-xs tracking-wider">
+                    STATUS NO BRACKET
+                  </h3>
+                </div>
+                <div className="p-2">
+                  {ranking.length === 0 ? (
+                    <p className="text-xs text-[#A1A1AA] text-center py-4">
+                      Nenhum time no torneio ainda
+                    </p>
+                  ) : (
+                    ranking.map((team) => (
+                      <div
+                        key={`mobile-rank-${team.id}`}
+                        className={`flex items-center gap-3 p-2 rounded ${
+                          team.status === "eliminated" ? "opacity-50" : ""
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                          team.status === "champion" ? "bg-[#FFD700]" :
+                          team.status === "eliminated" ? "bg-[#ef4444]/20 border border-[#ef4444]/50" :
+                          "bg-[#22c55e]/20 border border-[#22c55e]/50"
+                        }`}>
+                          {team.status === "champion" && (
+                            <svg className="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                          )}
+                          {team.status === "eliminated" && (
+                            <svg className="w-3 h-3 text-[#ef4444]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                          )}
+                          {team.status === "active" && (
+                            <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                          )}
+                        </div>
+                        <div className="w-6 h-6 rounded bg-[#27272A] border border-[#A855F7]/20 flex items-center justify-center overflow-hidden">
+                          {team.logo_url ? (
+                            <img src={team.logo_url} alt={team.name} className="w-5 h-5 object-contain" />
+                          ) : (
+                            <span className="text-[6px] font-mono text-[#A1A1AA]">{team.tag}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-xs font-body block truncate ${
+                            team.status === "champion" ? "text-[#FFD700] font-semibold" :
+                            team.status === "eliminated" ? "text-[#52525B]" :
+                            "text-[#F5F5DC]"
+                          }`}>
+                            {team.name}
+                          </span>
+                          <span className="text-[9px] font-mono text-[#52525B]">
+                            {team.wins}W - {team.losses}L
+                          </span>
+                        </div>
+                        <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${
+                          team.status === "champion" ? "bg-[#FFD700]/20 text-[#FFD700]" :
+                          team.status === "eliminated" ? "bg-[#ef4444]/10 text-[#ef4444]" :
+                          "bg-[#22c55e]/10 text-[#22c55e]"
+                        }`}>
+                          {team.status === "champion" ? "CAMPEÃO" :
+                           team.status === "eliminated" ? "ELIMINADO" : "ATIVO"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Top Players - Mobile */}
+              {topPlayers.length > 0 && (
+                <div className="bg-[#0f0f15] rounded-lg border border-[#A855F7]/20">
+                  <div className="p-4 bg-[#12121a] rounded-t-lg">
+                    <h3 className="font-mono text-[#F5F5DC] text-xs tracking-wider">
+                      TOP PLAYERS
+                    </h3>
+                  </div>
+                  <div className="p-2">
+                    {topPlayers.map((player, index) => {
+                      const kd = player.stats
+                        ? (player.stats.deaths > 0
+                            ? (player.stats.kills / player.stats.deaths).toFixed(2)
+                            : player.stats.kills > 0
+                            ? player.stats.kills.toFixed(2)
+                            : null)
+                        : null;
+                      return (
+                        <div
+                          key={`mobile-player-${player.id}`}
+                          className="flex items-center gap-3 p-2 rounded"
+                        >
+                          <span className={`font-mono text-sm w-5 text-center ${
+                            index === 0 ? "text-[#FFD700]" :
+                            index === 1 ? "text-[#C0C0C0]" :
+                            index === 2 ? "text-[#CD7F32]" : "text-[#A1A1AA]"
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <div className="flex-1">
+                            <span className="text-xs font-body text-[#F5F5DC] block">
+                              {player.username}
+                            </span>
+                            <span className="text-[10px] font-mono text-[#A1A1AA]">
+                              {player.team_name || "Sem time"}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            {kd ? (
+                              <span className={`text-xs font-mono font-bold ${
+                                Number(kd) >= 1.0 ? "text-[#22c55e]" : "text-[#ef4444]"
+                              }`}>
+                                {kd} K/D
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono text-[#52525B]">-</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </main>
 
         {/* Sidebar Direito - Partidas do Bracket */}
-        <aside className="fixed right-0 top-16 bottom-0 w-72 bg-[#0f0f15] border-l border-[#A855F7]/20 overflow-y-auto">
+        <aside className="hidden lg:block fixed right-0 top-16 bottom-0 w-72 bg-[#0f0f15] border-l border-[#A855F7]/20 overflow-y-auto">
           {/* Header do Sidebar com Tabs */}
           <div className="sticky top-0 bg-[#0f0f15] border-b border-[#A855F7]/20">
             <div className="p-4 pb-2">

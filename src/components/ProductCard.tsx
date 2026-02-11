@@ -241,7 +241,7 @@ export default function ProductCard({ product, index }: ProductCardProps) {
 
           <div className="flex items-center justify-between mb-4">
             <span className="font-mono text-lg text-[#A855F7]">
-              R$ {product.price.toFixed(2).replace(".", ",")}
+              R$ {(product.price / 100).toFixed(2).replace(".", ",")}
             </span>
             <div className="flex gap-1">
               {product.sizes.map((size) => (

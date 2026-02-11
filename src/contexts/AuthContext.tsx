@@ -178,35 +178,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // O trigger handle_new_user cria o profile automaticamente com os dados do
-    // raw_user_meta_data. Usamos UPSERT para garantir que todos os campos extras
-    // sejam salvos, mesmo se o trigger já criou o profile (evita conflito 409/23505).
+    // raw_user_meta_data (incluindo steam_id se o trigger atualizado estiver ativo).
+    // Tentamos fazer upsert via service role API para garantir que steam_id e campos
+    // extras sejam salvos, mesmo que a RLS bloqueie o upsert do client anon.
     if (authData.user) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: authData.user.id,
+      try {
+        const res = await fetch("/api/auth/complete-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: authData.user.id,
             username: data.username,
-            steam_id: data.steamId || null,
+            steamId: data.steamId || null,
             name: data.name || null,
-            is_tournament_player: data.isTournamentPlayer || false,
-            is_store_customer: data.isStoreCustomer || false,
-            level: 1,
-            xp: 0,
-          },
-          { onConflict: "id" }
-        );
+            isTournamentPlayer: data.isTournamentPlayer || false,
+            isStoreCustomer: data.isStoreCustomer || false,
+          }),
+        });
 
-      if (profileError) {
-        // Tratar username duplicado (constraint UNIQUE no username)
-        if ((profileError as any).code === "23505" && (profileError as any).message?.includes("username")) {
-          return { error: new Error("Este nome de usuário já está em uso") };
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          // Username duplicado
+          if (res.status === 409) {
+            return { error: new Error("Este nome de usuário já está em uso") };
+          }
+          // Outros erros não-críticos: o trigger já criou o profile base
+          console.warn("Profile upsert warning:", body);
         }
-        // Ignorar outros erros de conflito (trigger já criou o profile com sucesso)
-        if ((profileError as any).code === "23505") {
-          return { error: null };
+      } catch (e) {
+        // Fallback: se a API route falhar, tentar upsert direto (pode falhar por RLS)
+        console.warn("Profile API fallback:", e);
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: authData.user.id,
+              username: data.username,
+              steam_id: data.steamId || null,
+              name: data.name || null,
+              is_tournament_player: data.isTournamentPlayer || false,
+              is_store_customer: data.isStoreCustomer || false,
+              level: 1,
+              xp: 0,
+            },
+            { onConflict: "id" }
+          );
+        if (profileError && (profileError as any).code !== "23505") {
+          console.warn("Profile upsert fallback error:", profileError);
         }
-        return { error: profileError as unknown as Error };
       }
     }
 
