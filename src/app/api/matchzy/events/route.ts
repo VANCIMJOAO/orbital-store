@@ -261,7 +261,7 @@ async function getOrCreateMatchMap(
     .from("match_maps")
     .select("id")
     .eq("match_id", matchId)
-    .eq("map_order", mapNumber)
+    .eq("map_number", mapNumber)
     .single();
 
   if (existing) {
@@ -294,7 +294,7 @@ async function getOrCreateMatchMap(
     .insert({
       match_id: matchId,
       map_name: resolvedMapName,
-      map_order: mapNumber,
+      map_number: mapNumber,
       status: "live",
     })
     .select("id")

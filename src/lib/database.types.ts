@@ -638,7 +638,7 @@ export type Database = {
           id: string
           match_id: string
           map_name: string
-          map_order: number
+          map_number: number
           team1_score: number
           team2_score: number
           winner_id: string | null
@@ -650,7 +650,7 @@ export type Database = {
           id?: string
           match_id: string
           map_name: string
-          map_order: number
+          map_number: number
           team1_score?: number
           team2_score?: number
           winner_id?: string | null
@@ -662,7 +662,7 @@ export type Database = {
           id?: string
           match_id?: string
           map_name?: string
-          map_order?: number
+          map_number?: number
           team1_score?: number
           team2_score?: number
           winner_id?: string | null

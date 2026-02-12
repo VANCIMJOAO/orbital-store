@@ -51,7 +51,7 @@ interface SupabasePlayer {
 interface MatchMapData {
   id: string;
   map_name: string;
-  map_order: number;
+  map_number: number;
   team1_score: number;
   team2_score: number;
   winner_id: string | null;
@@ -984,7 +984,7 @@ function MapsSection({
           const isLive = isCurrentMap;
           const pickStep = vetoData.steps.find(s => s.map === map);
           const colors = MAP_COLORS[map] || { from: "#1a1a2e", to: "#0f0f15", accent: "#A1A1AA" };
-          const mapData = matchMaps?.find(m => m.map_order === index);
+          const mapData = matchMaps?.find(m => m.map_number === index);
           const hasScore = mapData && (mapData.team1_score > 0 || mapData.team2_score > 0);
           const isFinished = mapData?.status === "finished";
 
@@ -1687,9 +1687,9 @@ export default function MatchPage() {
         // Buscar match_maps (mapas da série com scores e demo_url)
         const { data: maps } = await supabase
           .from('match_maps')
-          .select('id, map_name, map_order, team1_score, team2_score, winner_id, status, demo_url')
+          .select('id, map_name, map_number, team1_score, team2_score, winner_id, status, demo_url')
           .eq('match_id', matchId)
-          .order('map_order', { ascending: true });
+          .order('map_number', { ascending: true });
         setMatchMaps((maps || []) as unknown as MatchMapData[]);
       } catch {
         setDbError(true);
