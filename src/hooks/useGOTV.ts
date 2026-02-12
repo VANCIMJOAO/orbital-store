@@ -289,6 +289,8 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
                     team2: mzState.team2,
                     currentRound: mzState.currentRound,
                     currentHalf: mzState.currentHalf,
+                    scoreCT: mzState.team1?.score ?? prev.scoreCT,
+                    scoreT: mzState.team2?.score ?? prev.scoreT,
                     ...(mzState.mapName ? { mapName: mzState.mapName } : {}),
                   };
                 });
