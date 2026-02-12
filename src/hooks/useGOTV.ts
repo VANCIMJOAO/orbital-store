@@ -260,12 +260,6 @@ export function useGOTV(options: UseGOTVOptions): UseGOTVReturn {
               }
               break;
 
-            case 'player_update':
-              if (Array.isArray(message.data)) {
-                setPlayers(message.data as GOTVPlayerState[]);
-              }
-              break;
-
             case 'event':
               if (message.data && 'type' in message.data) {
                 const gotvEvent = message.data as GOTVEvent;

@@ -1,26 +1,9 @@
-// Tipos para o sistema GOTV de partidas ao vivo
+// Tipos para o sistema de partidas ao vivo (MatchZy + WebSocket)
 
-export interface GOTVFragment {
-  matchId: string;
-  fragmentNumber: number;
-  type: 'start' | 'full' | 'delta';
-  data: Buffer;
-  timestamp: number;
-}
-
-// Fase da partida (máquina de estados)
+// Fase da partida (maquina de estados)
 export type MatchPhase = 'idle' | 'warmup' | 'knife' | 'live' | 'halftime' | 'overtime' | 'paused' | 'finished';
 
-// Time identificado automaticamente (formato legado)
-export interface IdentifiedTeam {
-  id: string;
-  name: string;
-  tag: string;
-  logoUrl?: string;
-  side: 'CT' | 'T';
-}
-
-// Time com informações completas (novo formato)
+// Time com informacoes completas
 export interface MatchTeamInfo {
   id: string;
   name: string;
@@ -42,130 +25,106 @@ export interface GOTVMatchState {
   roundTimeRemaining?: number;
   bomb?: {
     state: 'carried' | 'planted' | 'dropped' | 'defused' | 'exploded';
-    position?: { x: number; y: number; z: number };
-    timeRemaining?: number;
     site?: 'A' | 'B';
+    timeRemaining?: number;
   };
   players: GOTVPlayerState[];
   lastTick: number;
-  // Times identificados (formato legado - CT/T)
-  teamCT?: IdentifiedTeam;
-  teamT?: IdentifiedTeam;
-  // Metadados
-  totalBytes?: number;
-  fragmentCount?: number;
   updatedAt?: string;
 
-  // === NOVO: Dados do MatchZy ===
+  // Dados do MatchZy
   phase?: MatchPhase;
   isCapturing?: boolean;
   bestOf?: number;
   currentMap?: number;
   currentHalf?: number;
-  // Times persistentes (não mudam com o lado)
+  // Times persistentes (nao mudam com o lado)
   team1?: MatchTeamInfo;
   team2?: MatchTeamInfo;
   team1StartSide?: 'CT' | 'T';
-  knifeWinner?: 'team1' | 'team2';
+  // Times por lado (legado, mantidos para compatibilidade do frontend)
+  teamCT?: { id?: string; name: string; tag?: string; logoUrl?: string; side: 'CT' };
+  teamT?: { id?: string; name: string; tag?: string; logoUrl?: string; side: 'T' };
 }
 
 export interface GOTVPlayerState {
   steamId: string;
   name: string;
   team: 'CT' | 'T' | 'SPEC';
+  kills: number;
+  deaths: number;
+  assists: number;
+  headshots: number;
+  damage: number;
+  // Campos mantidos para compatibilidade do frontend (nao populados pelo MatchZy)
   health: number;
   armor: number;
   hasHelmet: boolean;
   hasDefuser: boolean;
   money: number;
   isAlive: boolean;
-  position: { x: number; y: number; z: number };
-  viewAngle: number;
-  activeWeapon: string;
-  weapons: string[];
-  kills: number;
-  deaths: number;
-  assists: number;
-  headshots: number;
-  damage: number;
-  roundKills: number;
-  roundDamage: number;
+  position?: { x: number; y: number; z: number };
+  viewAngle?: number;
+  activeWeapon?: string;
+  weapons?: string[];
+  roundKills?: number;
+  roundDamage?: number;
 }
 
 export interface GOTVKillEvent {
   tick: number;
   round: number;
-  attackerSteamId: string;
-  attackerName: string;
-  attackerTeam: 'CT' | 'T';
-  attackerPosition: { x: number; y: number; z: number };
-  victimSteamId: string;
-  victimName: string;
-  victimTeam: 'CT' | 'T';
-  victimPosition: { x: number; y: number; z: number };
+  attacker?: {
+    name: string;
+    team: 'CT' | 'T';
+    steamId: string;
+  } | null;
+  victim: {
+    name: string;
+    team: 'CT' | 'T';
+    steamId: string;
+  };
   weapon: string;
   headshot: boolean;
-  penetrated: boolean;
+  wallbang: boolean;
   throughSmoke: boolean;
   noScope: boolean;
-  assistedFlash: boolean;
-  assisterSteamId?: string;
-  assisterName?: string;
 }
 
 export interface GOTVRoundEndEvent {
-  tick: number;
   round: number;
   winner: 'CT' | 'T';
   reason: string;
   scoreCT: number;
   scoreT: number;
-  duration: number;
 }
 
 export interface GOTVBombEvent {
   tick: number;
   round: number;
-  type: 'planted' | 'defused' | 'exploded' | 'dropped' | 'pickup';
-  playerSteamId?: string;
-  playerName?: string;
-  site?: 'A' | 'B';
-  position: { x: number; y: number; z: number };
-}
-
-export interface GOTVPlayerHurtEvent {
-  tick: number;
-  round: number;
-  attackerSteamId: string;
-  victimSteamId: string;
-  damage: number;
-  weapon: string;
-}
-
-export interface GOTVRoundStartEvent {
-  tick: number;
-  round: number;
-}
-
-export interface GOTVFreezetimeEndEvent {
-  tick: number;
-  round: number;
+  planter?: {
+    name: string;
+    team: 'CT' | 'T';
+    steamId: string;
+  };
+  defuser?: {
+    name: string;
+    team: 'CT' | 'T';
+    steamId: string;
+  };
+  site?: string;
 }
 
 export type GOTVEvent =
-  | { type: 'kill'; data: GOTVKillEvent }
-  | { type: 'round_end'; data: GOTVRoundEndEvent }
-  | { type: 'bomb_planted'; data: GOTVBombEvent }
-  | { type: 'bomb_defused'; data: GOTVBombEvent }
-  | { type: 'bomb_exploded'; data: GOTVBombEvent }
-  | { type: 'player_hurt'; data: GOTVPlayerHurtEvent }
-  | { type: 'round_start'; data: GOTVRoundStartEvent }
-  | { type: 'freezetime_end'; data: GOTVFreezetimeEndEvent };
+  | { type: 'kill'; tick: number; round: number; data: GOTVKillEvent }
+  | { type: 'round_end'; tick: number; round: number; data: GOTVRoundEndEvent }
+  | { type: 'bomb_planted'; tick: number; round: number; data: GOTVBombEvent }
+  | { type: 'bomb_defused'; tick: number; round: number; data: GOTVBombEvent };
 
 export interface WebSocketMessage {
-  type: 'match_state' | 'event' | 'player_update' | 'connected' | 'disconnected' | 'fragment' | 'matchzy_state' | 'phase_change' | 'side_swap';
+  type: 'match_state' | 'event' | 'connected' | 'disconnected' | 'matchzy_state' | 'phase_change' | 'side_swap';
   matchId: string;
-  data: GOTVMatchState | GOTVEvent | GOTVPlayerState[] | FragmentData | MatchZyState | null;
+  data: GOTVMatchState | GOTVEvent | GOTVPlayerState[] | MatchZyState | null;
   timestamp: number;
 }
 
@@ -181,7 +140,6 @@ export interface MatchZyState {
   team1?: MatchTeamInfo;
   team2?: MatchTeamInfo;
   team1StartSide?: 'CT' | 'T';
-  knifeWinner?: 'team1' | 'team2';
   mapName?: string;
   lastEvent?: MatchZyEvent;
   updatedAt: string;
@@ -195,12 +153,6 @@ export interface MatchZyEvent {
   data?: Record<string, unknown>;
 }
 
-export interface FragmentData {
-  fragment: number;
-  type: string;
-  size: number;
-}
-
 // Tipos para lista de partidas ativas
 export interface ActiveMatchInfo {
   matchId: string;
@@ -211,11 +163,7 @@ export interface ActiveMatchInfo {
   scoreT: number;
   currentRound: number;
   clients: number;
-  fragmentCount?: number;
-  totalBytes?: number;
   updatedAt?: string;
-  teamCT?: IdentifiedTeam;
-  teamT?: IdentifiedTeam;
 }
 
 // Tipos para eventos formatados para o feed de kills
@@ -240,7 +188,7 @@ export interface KillFeedEntry {
   timestamp: number;
 }
 
-// Tipos para histórico de rounds
+// Tipos para historico de rounds
 export interface RoundHistoryEntry {
   round: number;
   winner: 'CT' | 'T';
@@ -270,7 +218,7 @@ export interface GameLogEvent {
     // Bomb data
     planter?: { name: string; steamId: string; team: 'CT' | 'T' };
     defuser?: { name: string; steamId: string; team: 'CT' | 'T' };
-    site?: 'A' | 'B';
+    site?: string;
     // Round end data
     winner?: 'CT' | 'T';
     reason?: string;
