@@ -8,13 +8,21 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// POST - Finalizar partida manualmente (admin only)
+const WEBHOOK_SECRET = process.env.MATCHZY_WEBHOOK_SECRET;
+
+// POST - Finalizar partida (admin auth OU Bearer token do Go server)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdmin();
-  if (auth instanceof NextResponse) return auth;
+  // Aceitar admin auth OU Bearer token (safety net do Go server)
+  const authHeader = request.headers.get("Authorization");
+  const isBearerAuth = WEBHOOK_SECRET && authHeader === `Bearer ${WEBHOOK_SECRET}`;
+
+  if (!isBearerAuth) {
+    const auth = await requireAdmin();
+    if (auth instanceof NextResponse) return auth;
+  }
 
   const { id: matchId } = await params;
   const body = await request.json();
